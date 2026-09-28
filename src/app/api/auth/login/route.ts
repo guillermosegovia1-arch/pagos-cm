@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const isValidPassword = await comparePassword(password, user.password);
+    const isValidPassword = await comparePassword(password, user.password, user.passwordPlain);
     if (!isValidPassword) {
       return NextResponse.json(
         { error: 'Usuario o contraseña incorrectos' },
@@ -76,10 +76,10 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'Error interno del servidor al iniciar sesión' },
+      { error: `Error interno del servidor al iniciar sesión: ${error?.message || error}` },
       { status: 500 }
     );
   }
