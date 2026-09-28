@@ -2,44 +2,39 @@ import { PrismaClient } from '@prisma/client';
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { PrismaNeon } from '@prisma/adapter-neon';
 
-const DEFAULT_NEON_URL =
+const FALLBACK_DATABASE_URL =
   'postgresql://neondb_owner:npg_MY1RQZa0bIJB@ep-rapid-unit-b4bdxgsg-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
-function getValidConnectionString(): string {
-  const envUrl = typeof process !== 'undefined' && process.env ? process.env.DATABASE_URL : undefined;
-  if (envUrl && typeof envUrl === 'string') {
-    const trimmed = envUrl.trim();
-    if ((trimmed.startsWith('postgresql://') || trimmed.startsWith('postgres://')) && !trimmed.includes('undefined')) {
-      return trimmed;
+if (typeof WebSocket !== 'undefined') {
+  neonConfig.webSocketConstructor = WebSocket;
+}
+
+function getConnectionString(): string {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.DATABASE_URL) {
+      const envUrl = String(process.env.DATABASE_URL).trim();
+      if ((envUrl.startsWith('postgresql://') || envUrl.startsWith('postgres://')) && !envUrl.includes('undefined')) {
+        return envUrl;
+      }
     }
+  } catch (e) {
+    // Ignore error reading env
   }
-  return DEFAULT_NEON_URL;
+  return FALLBACK_DATABASE_URL;
 }
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const createPrismaClient = () => {
-  const connectionString = getValidConnectionString();
+const connectionString = getConnectionString();
+const pool = new Pool({ connectionString });
+const adapter = new PrismaNeon(pool as any);
 
-  if (typeof WebSocket !== 'undefined') {
-    neonConfig.webSocketConstructor = WebSocket;
-  }
-
-  try {
-    const pool = new Pool({ connectionString });
-    const adapter = new PrismaNeon(pool as any);
-    return new PrismaClient({ adapter });
-  } catch (e) {
-    console.error('Prisma pool error:', e);
-    const pool = new Pool({ connectionString: DEFAULT_NEON_URL });
-    const adapter = new PrismaNeon(pool as any);
-    return new PrismaClient({ adapter });
-  }
-};
-
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    adapter,
+  });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-
