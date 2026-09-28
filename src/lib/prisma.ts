@@ -18,7 +18,7 @@ function getConnectionString(): string {
       }
     }
   } catch (e) {
-    // Ignore error reading env
+    // Ignore env error
   }
   return FALLBACK_DATABASE_URL;
 }
@@ -28,7 +28,17 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const connectionString = getConnectionString();
-const pool = new Pool({ connectionString });
+
+const pool = new Pool({
+  connectionString,
+  host: 'ep-rapid-unit-b4bdxgsg-pooler.c-6.us-east-2.aws.neon.tech',
+  user: 'neondb_owner',
+  password: 'npg_MY1RQZa0bIJB',
+  database: 'neondb',
+  port: 5432,
+  ssl: true,
+});
+
 const adapter = new PrismaNeon(pool as any);
 
 export const prisma =
