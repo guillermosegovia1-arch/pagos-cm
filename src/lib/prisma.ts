@@ -5,13 +5,23 @@ import { PrismaNeon } from '@prisma/adapter-neon';
 const DEFAULT_NEON_URL =
   'postgresql://neondb_owner:npg_MY1RQZa0bIJB@ep-rapid-unit-b4bdxgsg-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
+function getValidConnectionString(): string {
+  const envUrl = typeof process !== 'undefined' && process.env ? process.env.DATABASE_URL : undefined;
+  if (envUrl && typeof envUrl === 'string') {
+    const trimmed = envUrl.trim();
+    if ((trimmed.startsWith('postgresql://') || trimmed.startsWith('postgres://')) && !trimmed.includes('undefined')) {
+      return trimmed;
+    }
+  }
+  return DEFAULT_NEON_URL;
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 const createPrismaClient = () => {
-  const envUrl = typeof process !== 'undefined' && process.env ? process.env.DATABASE_URL : null;
-  const connectionString = envUrl && envUrl.trim().length > 0 ? envUrl.trim() : DEFAULT_NEON_URL;
+  const connectionString = getValidConnectionString();
 
   if (typeof WebSocket !== 'undefined') {
     neonConfig.webSocketConstructor = WebSocket;
@@ -32,3 +42,4 @@ const createPrismaClient = () => {
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
