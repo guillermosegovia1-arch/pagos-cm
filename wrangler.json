@@ -5,5 +5,10 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "pages_build_output_dir": ".vercel/output/static"
+  "pages_build_output_dir": ".vercel/output/static",
+  "vars": {
+    "DATABASE_URL": "postgresql://neondb_owner:npg_MY1RQZa0bIJB@ep-rapid-unit-b4bdxgsg-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require",
+    "JWT_SECRET": "pagos-cm-super-secret-key-2026-colegio-mexicano",
+    "NODE_VERSION": "20.x"
+  }
 }
