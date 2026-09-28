@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -27,7 +29,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
   }
 
-  // Ensure concepts exist if user level has missing concepts
   const requiredConcepts = getConceptosForNivel(user.nivelEscolar);
   const existingConceptNames = new Set(user.pagos.map((p) => p.concepto));
 
@@ -45,7 +46,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Re-fetch user pagos
     const updatedUser = await prisma.user.findUnique({
       where: { id: payload.id },
       include: {

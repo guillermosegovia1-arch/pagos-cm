@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifySessionToken } from '@/lib/auth';
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
       where: { id: pagoId },
       data: {
         respuestaAlumno: respuestaAlumno.trim(),
-        estado: 'En Revisión', // Changes state to En Revisión once student answers clarification
+        estado: 'En Revisión',
         fechaReportado: new Date(),
       },
     });

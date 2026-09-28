@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
@@ -22,7 +24,6 @@ export async function POST(request: Request) {
 
     const { usuario, password } = parsed.data;
 
-    // Search user by usuario
     const user = await prisma.user.findUnique({
       where: { usuario: usuario.trim() },
     });
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24, // 24 hours
+      maxAge: 60 * 60 * 24,
       path: '/',
     });
 

@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifySessionToken, hashPassword } from '@/lib/auth';
@@ -7,7 +9,7 @@ import { getConceptosForNivel } from '@/lib/concepts';
 const userUpdateSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido'),
   usuario: z.string().min(1, 'El usuario es requerido'),
-  password: z.string().optional(), // Passed only if updating password via "Nueva contraseña"
+  password: z.string().optional(),
   nivelEscolar: z.string().min(1, 'El nivel escolar es requerido'),
   grado: z.string().nullable().optional(),
   grupo: z.string().nullable().optional(),
@@ -50,7 +52,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    // Check unique username if username changed
     if (data.usuario.trim() !== existingUser.usuario) {
       const duplicateUser = await prisma.user.findUnique({
         where: { usuario: data.usuario.trim() },
@@ -91,16 +92,13 @@ export async function PUT(
       },
     });
 
-    // Re-sync concepts if nivelEscolar changed or user was updated
     if (data.nivelEscolar !== existingUser.nivelEscolar) {
       if (isNoAplica) {
-        // Delete payment concepts for non-students
         await prisma.pago.deleteMany({ where: { userId: id } });
       } else {
         const requiredConcepts = getConceptosForNivel(data.nivelEscolar);
         const existingConceptsMap = new Map(existingUser.pagos.map((p) => [p.concepto, p]));
 
-        // Create missing
         for (const req of requiredConcepts) {
           if (!existingConceptsMap.has(req.concepto)) {
             await prisma.pago.create({
@@ -114,7 +112,6 @@ export async function PUT(
           }
         }
 
-        // Remove concepts no longer applicable for new level
         const reqConceptNames = new Set(requiredConcepts.map((r) => r.concepto));
         for (const existingPago of existingUser.pagos) {
           if (!reqConceptNames.has(existingPago.concepto)) {

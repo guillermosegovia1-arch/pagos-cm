@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { verifySessionToken, hashPassword } from '@/lib/auth';
@@ -46,7 +48,6 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < rawData.length; i++) {
       const row = rawData[i];
 
-      // Normalize row keys
       const nombre = row['Nombre'] || row['nombre'] || row['Nombre Completo'] || row['Alumno'];
       const usuario = row['Usuario'] || row['usuario'] || row['User'] || row['Usuario / Matrícula'];
       const password = row['Contraseña'] || row['Password'] || row['password'] || row['Clave'] || 'cm123456';
@@ -111,7 +112,6 @@ export async function POST(request: NextRequest) {
         createdCount++;
       }
 
-      // Automatically generate or update payment concepts
       if (finalRole === 'ALUMNO' && !isNoAplica) {
         const reqConcepts = getConceptosForNivel(strNivel);
         const existingPagos = await prisma.pago.findMany({ where: { userId } });

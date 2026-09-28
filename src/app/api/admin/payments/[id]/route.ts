@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifySessionToken } from '@/lib/auth';
@@ -37,7 +39,6 @@ export async function PUT(
 
     const { estado, motivoAclaracion, comentarioAdmin, fechaConfirmado } = parsed.data;
 
-    // Check existing payment to decide fechaConfirmado
     const existingPago = await prisma.pago.findUnique({ where: { id } });
 
     let finalFechaConfirmado = existingPago?.fechaConfirmado;

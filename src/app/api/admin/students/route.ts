@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { verifySessionToken, hashPassword } from '@/lib/auth';
@@ -58,7 +60,6 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data;
 
-    // Check unique username
     const existing = await prisma.user.findUnique({
       where: { usuario: data.usuario.trim() },
     });
@@ -91,7 +92,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Automatically generate payment concepts if student
     if (computedRole === 'ALUMNO' && !isNoAplica) {
       const concepts = getConceptosForNivel(data.nivelEscolar);
       for (const c of concepts) {
