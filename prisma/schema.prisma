@@ -1,0 +1,42 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  nombre        String
+  usuario       String   @unique
+  password      String
+  passwordPlain String
+  role          String   @default("ALUMNO")
+  nivelEscolar  String
+  grado         String?
+  grupo         String?
+  estado        String   @default("Alta")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  pagos         Pago[]
+}
+
+model Pago {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concepto           String
+  tipo               String    @default("ANUAL")
+  estado             String    @default("Pendiente")
+  numeroConfirmacion String?
+  motivoAclaracion   String?
+  comentarioAdmin    String?
+  respuestaAlumno    String?
+  fechaReportado     DateTime?
+  fechaConfirmado    DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
