@@ -143,8 +143,15 @@ export default function AdminDashboardPage() {
   // Selected status filter from Dashboard breakdown cards
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'TODOS' | 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración'>('TODOS');
 
-  const handleStatusCardClick = (status: 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración') => {
+  const handleStatusCardClick = (
+    status: 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración',
+    filterDate?: string
+  ) => {
     setSelectedStatusFilter(status);
+    if (filterDate) {
+      setStartDateFilter(filterDate);
+      setEndDateFilter(filterDate);
+    }
     setActiveTabSection('verificacion');
 
     // Switch to first student group tab if on Administración
@@ -246,6 +253,49 @@ export default function AdminDashboardPage() {
     const pendingPagos = allPagos.filter((p) => p.estado === 'Pendiente');
     const clarifyPagos = allPagos.filter((p) => p.estado === 'Requiere Aclaración');
 
+    // Calculate Today and Yesterday confirmed counts
+    const now = new Date();
+    const yesterdayDate = new Date(now);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+
+    const isSameDay = (dateStr: string | null, targetDate: Date) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      return (
+        d.getFullYear() === targetDate.getFullYear() &&
+        d.getMonth() === targetDate.getMonth() &&
+        d.getDate() === targetDate.getDate()
+      );
+    };
+
+    const todayConfirmedCount = confirmedPagos.filter((p) =>
+      isSameDay(p.fechaConfirmado || p.createdAt, now)
+    ).length;
+
+    const yesterdayConfirmedCount = confirmedPagos.filter((p) =>
+      isSameDay(p.fechaConfirmado || p.createdAt, yesterdayDate)
+    ).length;
+
+    const formatDayDisplay = (d: Date) => {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+
+    const todayFormatted = formatDayDisplay(now);
+    const yesterdayFormatted = formatDayDisplay(yesterdayDate);
+
+    const getISO = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const todayISO = getISO(now);
+    const yesterdayISO = getISO(yesterdayDate);
+
     // Students with at least 1 confirmed payment
     const studentsWhoPaidCount = studentsOnly.filter((u) =>
       u.pagos.some((p) => p.estado === 'Confirmado')
@@ -258,6 +308,12 @@ export default function AdminDashboardPage() {
       studentsWhoPaidCount,
       totalPagos: allPagos.length,
       confirmedCount: confirmedPagos.length,
+      todayConfirmedCount,
+      yesterdayConfirmedCount,
+      todayFormatted,
+      yesterdayFormatted,
+      todayISO,
+      yesterdayISO,
       inReviewCount: inReviewPagos.length,
       pendingCount: pendingPagos.length,
       clarifyCount: clarifyPagos.length,
@@ -778,75 +834,119 @@ export default function AdminDashboardPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs pt-2">
+                  {/* Total Confirmados */}
                   <button
                     type="button"
                     onClick={() => handleStatusCardClick('Confirmado')}
-                    className="bg-slate-950 p-4 rounded-xl border border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-500/10 text-left transition-all group cursor-pointer shadow-md"
+                    className="bg-slate-950 p-3.5 rounded-xl border border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-500/10 text-left transition-all group cursor-pointer shadow-md"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 group-hover:scale-125 transition-transform" />
-                        <span>Confirmados</span>
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold truncate">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 group-hover:scale-125 transition-transform" />
+                        <span className="truncate">Confirmados</span>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors shrink-0" />
                     </div>
                     <div className="text-2xl font-extrabold text-white mt-2">{metrics.confirmedCount}</div>
-                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-emerald-300">
-                      Ver en grupos &rarr;
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-emerald-300 truncate">
+                      Total acumulado &rarr;
                     </div>
                   </button>
 
+                  {/* Confirmados HOY */}
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Confirmado', metrics.todayISO)}
+                    className="bg-slate-950 p-3.5 rounded-xl border border-teal-500/40 hover:border-teal-400 hover:bg-teal-500/10 text-left transition-all group cursor-pointer shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-teal-300 font-bold truncate">
+                        <span className="w-2.5 h-2.5 rounded-full bg-teal-400 shrink-0 group-hover:scale-125 transition-transform" />
+                        <span className="truncate">Confirmados Hoy</span>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 transition-colors shrink-0" />
+                    </div>
+                    <div className="text-2xl font-extrabold text-teal-300 mt-2">{metrics.todayConfirmedCount}</div>
+                    <div className="text-[10px] text-teal-400/90 mt-1 font-semibold truncate flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-teal-400 inline shrink-0" />
+                      <span className="truncate">{metrics.todayFormatted}</span>
+                    </div>
+                  </button>
+
+                  {/* Confirmados AYER */}
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Confirmado', metrics.yesterdayISO)}
+                    className="bg-slate-950 p-3.5 rounded-xl border border-indigo-500/40 hover:border-indigo-400 hover:bg-indigo-500/10 text-left transition-all group cursor-pointer shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-indigo-300 font-bold truncate">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 shrink-0 group-hover:scale-125 transition-transform" />
+                        <span className="truncate">Confirmados Ayer</span>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors shrink-0" />
+                    </div>
+                    <div className="text-2xl font-extrabold text-indigo-300 mt-2">{metrics.yesterdayConfirmedCount}</div>
+                    <div className="text-[10px] text-indigo-400/90 mt-1 font-semibold truncate flex items-center gap-1">
+                      <CalendarDays className="w-3 h-3 text-indigo-400 inline shrink-0" />
+                      <span className="truncate">{metrics.yesterdayFormatted}</span>
+                    </div>
+                  </button>
+
+                  {/* En Revisión */}
                   <button
                     type="button"
                     onClick={() => handleStatusCardClick('En Revisión')}
-                    className="bg-slate-950 p-4 rounded-xl border border-blue-500/30 hover:border-blue-400 hover:bg-blue-500/10 text-left transition-all group cursor-pointer shadow-md"
+                    className="bg-slate-950 p-3.5 rounded-xl border border-blue-500/30 hover:border-blue-400 hover:bg-blue-500/10 text-left transition-all group cursor-pointer shadow-md"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-blue-400 font-bold">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 group-hover:scale-125 transition-transform" />
-                        <span>En Revisión</span>
+                      <div className="flex items-center gap-1.5 text-blue-400 font-bold truncate">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 group-hover:scale-125 transition-transform" />
+                        <span className="truncate">En Revisión</span>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" />
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors shrink-0" />
                     </div>
                     <div className="text-2xl font-extrabold text-white mt-2">{metrics.inReviewCount}</div>
-                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-blue-300">
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-blue-300 truncate">
                       Ver en grupos &rarr;
                     </div>
                   </button>
 
+                  {/* Pendientes */}
                   <button
                     type="button"
                     onClick={() => handleStatusCardClick('Pendiente')}
-                    className="bg-slate-950 p-4 rounded-xl border border-amber-500/30 hover:border-amber-400 hover:bg-amber-500/10 text-left transition-all group cursor-pointer shadow-md"
+                    className="bg-slate-950 p-3.5 rounded-xl border border-amber-500/30 hover:border-amber-400 hover:bg-amber-500/10 text-left transition-all group cursor-pointer shadow-md"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-amber-400 font-bold">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 group-hover:scale-125 transition-transform" />
-                        <span>Pendientes</span>
+                      <div className="flex items-center gap-1.5 text-amber-400 font-bold truncate">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 group-hover:scale-125 transition-transform" />
+                        <span className="truncate">Pendientes</span>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 transition-colors" />
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors shrink-0" />
                     </div>
                     <div className="text-2xl font-extrabold text-white mt-2">{metrics.pendingCount}</div>
-                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-amber-300">
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-amber-300 truncate">
                       Ver en grupos &rarr;
                     </div>
                   </button>
 
+                  {/* Aclaraciones */}
                   <button
                     type="button"
                     onClick={() => handleStatusCardClick('Requiere Aclaración')}
-                    className="bg-slate-950 p-4 rounded-xl border border-red-500/30 hover:border-red-400 hover:bg-red-500/10 text-left transition-all group cursor-pointer shadow-md"
+                    className="bg-slate-950 p-3.5 rounded-xl border border-red-500/30 hover:border-red-400 hover:bg-red-500/10 text-left transition-all group cursor-pointer shadow-md"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-red-400 font-bold">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 group-hover:scale-125 transition-transform" />
-                        <span>Aclaraciones</span>
+                      <div className="flex items-center gap-1.5 text-red-400 font-bold truncate">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 group-hover:scale-125 transition-transform" />
+                        <span className="truncate">Aclaraciones</span>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition-colors" />
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-red-400 transition-colors shrink-0" />
                     </div>
                     <div className="text-2xl font-extrabold text-white mt-2">{metrics.clarifyCount}</div>
-                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-red-300">
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-red-300 truncate">
                       Ver en grupos &rarr;
                     </div>
                   </button>
