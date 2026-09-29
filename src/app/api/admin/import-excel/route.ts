@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cache password hashes to maximize performance
+    // Cache password hashes
     const passwordHashCache = new Map<string, string>();
     const getHashedPassword = async (pass: string) => {
       if (passwordHashCache.has(pass)) {
@@ -67,22 +67,17 @@ export async function POST(request: NextRequest) {
       return hashed;
     };
 
-    // Pre-fetch all existing users and pagos in 2 fast queries
-    const allUsers = await prisma.user.findMany({
+    // Subrequest 1: Fetch existing users
+    const existingUsers = await prisma.user.findMany({
       select: { id: true, usuario: true },
     });
-    const userMap = new Map(allUsers.map((u) => [u.usuario.toLowerCase().trim(), u.id]));
-
-    const allPagos = await prisma.pago.findMany({
-      select: { userId: true, concepto: true },
-    });
-    const existingPagoSet = new Set(allPagos.map((p) => `${p.userId}_${p.concepto}`));
+    const existingUserMap = new Map(existingUsers.map((u) => [u.usuario.toLowerCase().trim(), u.id]));
 
     let createdCount = 0;
     let updatedCount = 0;
     const errors: string[] = [];
 
-    const newUsersToCreate: Array<{
+    const userRecordsToUpsert: Array<{
       id: string;
       nombre: string;
       usuario: string;
@@ -95,20 +90,8 @@ export async function POST(request: NextRequest) {
       estado: string;
     }> = [];
 
-    const usersToUpdate: Array<{
-      id: string;
-      nombre: string;
-      password: string;
-      passwordPlain: string;
-      role: string;
-      nivelEscolar: string;
-      grado: string | null;
-      grupo: string | null;
-      estado: string;
-    }> = [];
-
-    const processedUsers: Array<{
-      userId: string;
+    const processedUsersForPagos: Array<{
+      usuario: string;
       nivelEscolar: string;
       role: string;
     }> = [];
@@ -152,12 +135,14 @@ export async function POST(request: NextRequest) {
       const finalGrupo = isNoAplica ? null : strGrupo;
 
       const hashedPassword = await getHashedPassword(strPassword);
-      const existingUserId = userMap.get(strUsuario.toLowerCase());
+      const existingId = existingUserMap.get(strUsuario.toLowerCase());
 
-      if (existingUserId) {
-        usersToUpdate.push({
-          id: existingUserId,
+      if (existingId) {
+        updatedCount++;
+        userRecordsToUpsert.push({
+          id: existingId,
           nombre: strNombre,
+          usuario: strUsuario,
           password: hashedPassword,
           passwordPlain: strPassword,
           role: finalRole,
@@ -166,14 +151,11 @@ export async function POST(request: NextRequest) {
           grupo: finalGrupo,
           estado: 'Alta',
         });
-        processedUsers.push({
-          userId: existingUserId,
-          nivelEscolar: strNivel,
-          role: finalRole,
-        });
       } else {
+        createdCount++;
         const newId = crypto.randomUUID();
-        newUsersToCreate.push({
+        existingUserMap.set(strUsuario.toLowerCase(), newId);
+        userRecordsToUpsert.push({
           id: newId,
           nombre: strNombre,
           usuario: strUsuario,
@@ -185,59 +167,70 @@ export async function POST(request: NextRequest) {
           grupo: finalGrupo,
           estado: 'Alta',
         });
-        userMap.set(strUsuario.toLowerCase(), newId);
-        processedUsers.push({
-          userId: newId,
-          nivelEscolar: strNivel,
-          role: finalRole,
-        });
+      }
+
+      processedUsersForPagos.push({
+        usuario: strUsuario.toLowerCase(),
+        nivelEscolar: strNivel,
+        role: finalRole,
+      });
+    }
+
+    // Subrequests 2..N: Multi-row SQL UPSERT for Users in chunks of 150 rows (~7 subrequests total for 989 users)
+    if (userRecordsToUpsert.length > 0) {
+      const userChunkSize = 150;
+      for (let i = 0; i < userRecordsToUpsert.length; i += userChunkSize) {
+        const chunk = userRecordsToUpsert.slice(i, i + userChunkSize);
+        const valueClauses: string[] = [];
+        const params: any[] = [];
+        let pIdx = 1;
+
+        for (const u of chunk) {
+          valueClauses.push(
+            `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, $${pIdx + 5}, $${pIdx + 6}, $${pIdx + 7}, $${pIdx + 8}, $${pIdx + 9}, NOW(), NOW())`
+          );
+          params.push(
+            u.id,
+            u.nombre,
+            u.usuario,
+            u.password,
+            u.passwordPlain,
+            u.role,
+            u.nivelEscolar,
+            u.grado,
+            u.grupo,
+            u.estado
+          );
+          pIdx += 10;
+        }
+
+        const sql = `
+          INSERT INTO "User" ("id", "nombre", "usuario", "password", "passwordPlain", "role", "nivelEscolar", "grado", "grupo", "estado", "createdAt", "updatedAt")
+          VALUES ${valueClauses.join(', ')}
+          ON CONFLICT ("usuario") DO UPDATE SET
+            "nombre" = EXCLUDED."nombre",
+            "password" = EXCLUDED."password",
+            "passwordPlain" = EXCLUDED."passwordPlain",
+            "role" = EXCLUDED."role",
+            "nivelEscolar" = EXCLUDED."nivelEscolar",
+            "grado" = EXCLUDED."grado",
+            "grupo" = EXCLUDED."grupo",
+            "estado" = EXCLUDED."estado",
+            "updatedAt" = NOW();
+        `;
+
+        await prisma.$executeRawUnsafe(sql, ...params);
       }
     }
 
-    // 1. Create new users in parallel batches of 25 (No transactions needed for HTTP mode)
-    if (newUsersToCreate.length > 0) {
-      const userBatchSize = 25;
-      for (let i = 0; i < newUsersToCreate.length; i += userBatchSize) {
-        const batch = newUsersToCreate.slice(i, i + userBatchSize);
-        await Promise.all(
-          batch.map((u) =>
-            prisma.user.create({
-              data: u,
-            })
-          )
-        );
-      }
-      createdCount = newUsersToCreate.length;
-    }
+    // Subrequest N+1: Fetch existing pagos to prevent duplicate concepts
+    const allPagos = await prisma.pago.findMany({
+      select: { userId: true, concepto: true },
+    });
+    const existingPagoSet = new Set(allPagos.map((p) => `${p.userId}_${p.concepto}`));
 
-    // 2. Update existing users in parallel batches of 15 (No transactions needed for HTTP mode)
-    if (usersToUpdate.length > 0) {
-      const updateBatchSize = 15;
-      for (let i = 0; i < usersToUpdate.length; i += updateBatchSize) {
-        const batch = usersToUpdate.slice(i, i + updateBatchSize);
-        await Promise.all(
-          batch.map((u) =>
-            prisma.user.update({
-              where: { id: u.id },
-              data: {
-                nombre: u.nombre,
-                password: u.password,
-                passwordPlain: u.passwordPlain,
-                role: u.role,
-                nivelEscolar: u.nivelEscolar,
-                grado: u.grado,
-                grupo: u.grupo,
-                estado: u.estado,
-              },
-            })
-          )
-        );
-      }
-      updatedCount = usersToUpdate.length;
-    }
-
-    // 3. Create missing payment concepts in parallel batches of 50 (No transactions needed for HTTP mode)
-    const newPagosToCreate: Array<{
+    // Build Pago records
+    const pagoRecordsToInsert: Array<{
       id: string;
       userId: string;
       concepto: string;
@@ -245,15 +238,16 @@ export async function POST(request: NextRequest) {
       estado: string;
     }> = [];
 
-    for (const item of processedUsers) {
-      if (item.role === 'ALUMNO' && item.nivelEscolar.toLowerCase() !== 'no aplica') {
+    for (const item of processedUsersForPagos) {
+      const uId = existingUserMap.get(item.usuario);
+      if (uId && item.role === 'ALUMNO' && item.nivelEscolar.toLowerCase() !== 'no aplica') {
         const reqConcepts = getConceptosForNivel(item.nivelEscolar);
         for (const rc of reqConcepts) {
-          const key = `${item.userId}_${rc.concepto}`;
+          const key = `${uId}_${rc.concepto}`;
           if (!existingPagoSet.has(key)) {
-            newPagosToCreate.push({
+            pagoRecordsToInsert.push({
               id: crypto.randomUUID(),
-              userId: item.userId,
+              userId: uId,
               concepto: rc.concepto,
               tipo: rc.tipo,
               estado: 'Pendiente',
@@ -264,17 +258,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (newPagosToCreate.length > 0) {
-      const pagoBatchSize = 50;
-      for (let i = 0; i < newPagosToCreate.length; i += pagoBatchSize) {
-        const batch = newPagosToCreate.slice(i, i + pagoBatchSize);
-        await Promise.all(
-          batch.map((p) =>
-            prisma.pago.create({
-              data: p,
-            })
-          )
-        );
+    // Subrequests N+2..M: Multi-row SQL INSERT for Pagos in chunks of 400 rows (~15 subrequests total for 6,000 pagos)
+    if (pagoRecordsToInsert.length > 0) {
+      const pagoChunkSize = 400;
+      for (let i = 0; i < pagoRecordsToInsert.length; i += pagoChunkSize) {
+        const chunk = pagoRecordsToInsert.slice(i, i + pagoChunkSize);
+        const valueClauses: string[] = [];
+        const params: any[] = [];
+        let pIdx = 1;
+
+        for (const p of chunk) {
+          valueClauses.push(
+            `($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3}, $${pIdx + 4}, NOW(), NOW())`
+          );
+          params.push(p.id, p.userId, p.concepto, p.tipo, p.estado);
+          pIdx += 5;
+        }
+
+        const sql = `
+          INSERT INTO "Pago" ("id", "userId", "concepto", "tipo", "estado", "createdAt", "updatedAt")
+          VALUES ${valueClauses.join(', ')}
+          ON CONFLICT DO NOTHING;
+        `;
+
+        await prisma.$executeRawUnsafe(sql, ...params);
       }
     }
 
