@@ -1367,11 +1367,12 @@ export default function AdminDashboardPage() {
 
               <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs space-y-2">
                 <div className="text-cyan-400 font-bold">Columnas requeridas:</div>
-                <div className="grid grid-cols-2 gap-2 text-slate-300">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-slate-300">
                   <div>• Nombre</div>
                   <div>• Usuario</div>
                   <div>• Contraseña</div>
-                  <div>• Nivel Escolar</div>
+                  <div>• Nivel escolar</div>
+                  <div>• Rol</div>
                   <div>• Grado</div>
                   <div>• Grupo</div>
                 </div>
