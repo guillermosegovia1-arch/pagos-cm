@@ -43,8 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const workbook = XLSX.read(bytes, { type: 'array' });
 
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
