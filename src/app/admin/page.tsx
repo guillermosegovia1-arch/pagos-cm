@@ -27,7 +27,8 @@ import {
   TrendingUp,
   PieChart,
   CalendarDays,
-  FileText
+  FileText,
+  ArrowRight
 } from 'lucide-react';
 
 interface Pago {
@@ -137,6 +138,22 @@ export default function AdminDashboardPage() {
     router.push('/login');
   };
 
+  // Selected status filter from Dashboard breakdown cards
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'TODOS' | 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración'>('TODOS');
+
+  const handleStatusCardClick = (status: 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración') => {
+    setSelectedStatusFilter(status);
+    setActiveTabSection('verificacion');
+
+    // Switch to first student group tab if on Administración
+    if (selectedGroupTab === 'Administración' && groupTabsMap.length > 1) {
+      const firstStudentGroup = groupTabsMap.find(([name]) => name !== 'Administración');
+      if (firstStudentGroup) {
+        setSelectedGroupTab(firstStudentGroup[0]);
+      }
+    }
+  };
+
   // Group Tabs Calculation (SIN "TODOS", "Administración" PRIMERA opción)
   const groupTabsMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -149,6 +166,12 @@ export default function AdminDashboardPage() {
     users.forEach((u) => {
       if (u.nivelEscolar === 'No aplica' || u.role === 'ADMIN') return;
 
+      // If status filter is active, check if student has matching pagos
+      if (selectedStatusFilter !== 'TODOS') {
+        const hasMatchingPago = u.pagos.some((p) => p.estado === selectedStatusFilter);
+        if (!hasMatchingPago) return;
+      }
+
       let groupKey = 'Sin Grupo';
       if (u.grado && u.grupo) {
         groupKey = `${u.grado}${u.grupo}`;
@@ -160,7 +183,7 @@ export default function AdminDashboardPage() {
     });
 
     return Array.from(map.entries());
-  }, [users]);
+  }, [users, selectedStatusFilter]);
 
   // Set default group tab if current selected group is not in list
   useEffect(() => {
@@ -187,6 +210,12 @@ export default function AdminDashboardPage() {
 
       if (groupKey !== selectedGroupTab) return false;
 
+      // Status filter matching
+      if (selectedStatusFilter !== 'TODOS') {
+        const hasMatchingPago = u.pagos.some((p) => p.estado === selectedStatusFilter);
+        if (!hasMatchingPago) return false;
+      }
+
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -199,7 +228,7 @@ export default function AdminDashboardPage() {
 
       return true;
     });
-  }, [users, selectedGroupTab, searchQuery]);
+  }, [users, selectedGroupTab, searchQuery, selectedStatusFilter]);
 
   // Metric Calculation for Dashboard
   const metrics = useMemo(() => {
@@ -497,7 +526,7 @@ export default function AdminDashboardPage() {
       setImportResult(result);
       setFeedback({
         type: 'success',
-        text: `Importación completada: ${result.createdCount} alumnos creados, ${result.updatedCount} actualizados. Base de datos Neon.tech actualizada.`,
+        text: `Importación completada: ${result.createdCount} alumnos creados, ${result.updatedCount} actualizados.`,
       });
 
       // Switch to Verification panel to display new Excel groups automatically
@@ -527,7 +556,7 @@ export default function AdminDashboardPage() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
         <Loader2 className="w-10 h-10 animate-spin text-cyan-400" />
-        <p className="text-sm font-medium">Cargando Panel Administrativo (Neon.tech)...</p>
+        <p className="text-sm font-medium">Cargando Panel Administrativo...</p>
       </div>
     );
   }
@@ -544,9 +573,6 @@ export default function AdminDashboardPage() {
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
                 Pagos<span className="text-cyan-400">CM</span>
-                <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30">
-                  Neon.tech BD
-                </span>
               </h1>
               <p className="text-xs text-slate-400 hidden sm:block">
                 Portal de registro de pagos de Plataformas del Colegio Mexicano
@@ -695,115 +721,127 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Visual Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Estatus General de Pagos Breakdown */}
+            <div className="grid grid-cols-1 gap-6">
+              {/* Estatus General de Pagos Breakdown (Full Width & Clickable) */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <PieChart className="w-4 h-4 text-cyan-400" />
-                    <span>Distribución por Estatus de Pago</span>
-                  </h3>
-                  <span className="text-xs text-slate-400">{metrics.totalPagos} Conceptos Asignados</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <PieChart className="w-4 h-4 text-cyan-400" />
+                      <span>Distribución por Estatus de Pago</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Haga clic en cualquier recuadro para filtrar y consultar los resultados en las pestañas de grupos
+                    </p>
+                  </div>
+                  <span className="text-xs text-slate-400 font-semibold shrink-0">
+                    {metrics.totalPagos} Conceptos Asignados
+                  </span>
                 </div>
 
-                <div className="h-4 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
-                  <div
+                <div className="h-5 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800 p-0.5 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Confirmado')}
                     style={{ width: `${(metrics.confirmedCount / (metrics.totalPagos || 1)) * 100}%` }}
-                    className="bg-emerald-500 h-full transition-all"
-                    title="Confirmados"
+                    className="bg-emerald-500 h-full rounded-l transition-all hover:brightness-125 cursor-pointer"
+                    title="Confirmados (Haz clic para ver por grupos)"
                   />
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('En Revisión')}
                     style={{ width: `${(metrics.inReviewCount / (metrics.totalPagos || 1)) * 100}%` }}
-                    className="bg-blue-500 h-full transition-all"
-                    title="En Revisión"
+                    className="bg-blue-500 h-full transition-all hover:brightness-125 cursor-pointer"
+                    title="En Revisión (Haz clic para ver por grupos)"
                   />
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Pendiente')}
                     style={{ width: `${(metrics.pendingCount / (metrics.totalPagos || 1)) * 100}%` }}
-                    className="bg-amber-500 h-full transition-all"
-                    title="Pendientes"
+                    className="bg-amber-500 h-full transition-all hover:brightness-125 cursor-pointer"
+                    title="Pendientes (Haz clic para ver por grupos)"
                   />
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Requiere Aclaración')}
                     style={{ width: `${(metrics.clarifyCount / (metrics.totalPagos || 1)) * 100}%` }}
-                    className="bg-red-500 h-full transition-all"
-                    title="Requiere Aclaración"
+                    className="bg-red-500 h-full rounded-r transition-all hover:brightness-125 cursor-pointer"
+                    title="Requiere Aclaración (Haz clic para ver por grupos)"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
-                  <div className="bg-slate-950 p-3 rounded-xl border border-emerald-500/20">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      <span>Confirmados</span>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Confirmado')}
+                    className="bg-slate-950 p-4 rounded-xl border border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-500/10 text-left transition-all group cursor-pointer shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 group-hover:scale-125 transition-transform" />
+                        <span>Confirmados</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
                     </div>
-                    <div className="text-lg font-extrabold text-white mt-1">{metrics.confirmedCount}</div>
-                  </div>
+                    <div className="text-2xl font-extrabold text-white mt-2">{metrics.confirmedCount}</div>
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-emerald-300">
+                      Ver en grupos &rarr;
+                    </div>
+                  </button>
 
-                  <div className="bg-slate-950 p-3 rounded-xl border border-blue-500/20">
-                    <div className="flex items-center gap-1.5 text-blue-400 font-bold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                      <span>En Revisión</span>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('En Revisión')}
+                    className="bg-slate-950 p-4 rounded-xl border border-blue-500/30 hover:border-blue-400 hover:bg-blue-500/10 text-left transition-all group cursor-pointer shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-blue-400 font-bold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 group-hover:scale-125 transition-transform" />
+                        <span>En Revisión</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" />
                     </div>
-                    <div className="text-lg font-extrabold text-white mt-1">{metrics.inReviewCount}</div>
-                  </div>
+                    <div className="text-2xl font-extrabold text-white mt-2">{metrics.inReviewCount}</div>
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-blue-300">
+                      Ver en grupos &rarr;
+                    </div>
+                  </button>
 
-                  <div className="bg-slate-950 p-3 rounded-xl border border-amber-500/20">
-                    <div className="flex items-center gap-1.5 text-amber-400 font-bold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                      <span>Pendientes</span>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Pendiente')}
+                    className="bg-slate-950 p-4 rounded-xl border border-amber-500/30 hover:border-amber-400 hover:bg-amber-500/10 text-left transition-all group cursor-pointer shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 group-hover:scale-125 transition-transform" />
+                        <span>Pendientes</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 transition-colors" />
                     </div>
-                    <div className="text-lg font-extrabold text-white mt-1">{metrics.pendingCount}</div>
-                  </div>
+                    <div className="text-2xl font-extrabold text-white mt-2">{metrics.pendingCount}</div>
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-amber-300">
+                      Ver en grupos &rarr;
+                    </div>
+                  </button>
 
-                  <div className="bg-slate-950 p-3 rounded-xl border border-red-500/20">
-                    <div className="flex items-center gap-1.5 text-red-400 font-bold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                      <span>Aclaraciones</span>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusCardClick('Requiere Aclaración')}
+                    className="bg-slate-950 p-4 rounded-xl border border-red-500/30 hover:border-red-400 hover:bg-red-500/10 text-left transition-all group cursor-pointer shadow-md"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-red-400 font-bold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 group-hover:scale-125 transition-transform" />
+                        <span>Aclaraciones</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition-colors" />
                     </div>
-                    <div className="text-lg font-extrabold text-white mt-1">{metrics.clarifyCount}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Alumnos: Activos vs Bajas Chart */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-cyan-400" />
-                    <span>Estatus de Alumnos (Altas vs Bajas)</span>
-                  </h3>
-                  <span className="text-xs text-slate-400">{metrics.totalStudents} Alumnos Totales</span>
-                </div>
-
-                <div className="space-y-4 pt-2">
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <UserCheck className="w-3.5 h-3.5" /> Alumnos en Alta (Activos)
-                      </span>
-                      <span className="text-white font-bold">{metrics.activeStudents}</span>
+                    <div className="text-2xl font-extrabold text-white mt-2">{metrics.clarifyCount}</div>
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium group-hover:text-red-300">
+                      Ver en grupos &rarr;
                     </div>
-                    <div className="h-3 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                      <div
-                        style={{ width: `${(metrics.activeStudents / (metrics.totalStudents || 1)) * 100}%` }}
-                        className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                      <span className="text-red-400 flex items-center gap-1">
-                        <UserX className="w-3.5 h-3.5" /> Alumnos en Baja (Inactivos)
-                      </span>
-                      <span className="text-white font-bold">{metrics.bajasStudents}</span>
-                    </div>
-                    <div className="h-3 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                      <div
-                        style={{ width: `${(metrics.bajasStudents / (metrics.totalStudents || 1)) * 100}%` }}
-                        className="bg-gradient-to-r from-red-500 to-rose-400 h-full rounded-full transition-all"
-                      />
-                    </div>
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>
@@ -908,6 +946,25 @@ export default function AdminDashboardPage() {
         {/* GROUP TABS SYSTEM (Administración como PRIMERA opción, Detección dinámica de grupos) */}
         {activeTabSection !== 'importacion' && activeTabSection !== 'dashboard' && (
           <div className="space-y-4">
+            {selectedStatusFilter !== 'TODOS' && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-cyan-500/10 border border-cyan-500/30 p-3.5 rounded-2xl text-xs text-cyan-300 shadow-lg animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>
+                    Filtrando por estatus de pago: <strong className="text-white font-extrabold underline decoration-cyan-400">{selectedStatusFilter}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('TODOS')}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 font-bold flex items-center justify-center gap-1.5 transition-all text-xs shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Mostrar todos los estatus</span>
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-2 flex items-center gap-1">
                 <Filter className="w-3.5 h-3.5" />

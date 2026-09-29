@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, User, Lock, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { ShieldCheck, User, Lock, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,12 +44,6 @@ export default function LoginPage() {
       setError(err.message || 'Error de conexión');
       setLoading(false);
     }
-  };
-
-  const handleFillDemo = (u: string, p: string) => {
-    setUsuario(u);
-    setPassword(p);
-    setError(null);
   };
 
   return (
@@ -141,33 +135,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* Demo Credentials Quick Switcher */}
-        <div className="mt-8 pt-6 border-t border-slate-800/80">
-          <p className="text-xs font-semibold text-slate-400 mb-3 flex items-center gap-1.5 justify-center">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            Credenciales de prueba disponibles:
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => handleFillDemo('adminCM', 'admin123')}
-              className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-cyan-500/40 text-left transition-all hover:bg-slate-900 group"
-            >
-              <div className="font-semibold text-cyan-400 group-hover:text-cyan-300">Administrador</div>
-              <div className="text-slate-400 text-[11px] mt-0.5">adminCM / admin123</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleFillDemo('alumnoDemo', 'alumno123')}
-              className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-indigo-500/40 text-left transition-all hover:bg-slate-900 group"
-            >
-              <div className="font-semibold text-indigo-400 group-hover:text-indigo-300">Alumno (Padre)</div>
-              <div className="text-slate-400 text-[11px] mt-0.5">alumnoDemo / alumno123</div>
-            </button>
-          </div>
-        </div>
 
       </div>
     </main>
