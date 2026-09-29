@@ -20,7 +20,8 @@ import {
   FileCheck,
   X,
   PlayCircle,
-  FileText
+  FileText,
+  Calendar
 } from 'lucide-react';
 
 interface Pago {
@@ -31,6 +32,9 @@ interface Pago {
   numeroConfirmacion: string | null;
   motivoAclaracion: string | null;
   respuestaAlumno: string | null;
+  notaConcepto?: string | null;
+  mesColegiatura?: string | null;
+  fechaVencimiento?: string | null;
   fechaReportado: string | null;
 }
 
@@ -42,6 +46,41 @@ interface UserProfile {
   grado?: string | null;
   grupo?: string | null;
 }
+
+const getCurrentMonthName = () => {
+  const now = new Date();
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  return `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+};
+
+const getPlatformLinkForConcept = (concepto: string) => {
+  const norm = concepto.toLowerCase();
+  if (norm.includes('knotion')) {
+    return { name: 'Knotion', url: 'https://dep.knotion.com/login', colorClass: 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' };
+  }
+  if (norm.includes('lypro')) {
+    return { name: 'Lypro', url: 'https://lyprocolegiomexicano.appssolution.net/', colorClass: 'border-purple-500/40 text-purple-300 hover:bg-purple-500/10' };
+  }
+  return { name: 'SchoolCloud', url: 'https://erp.schoolcloud.net/campus/cm', colorClass: 'border-blue-500/40 text-blue-300 hover:bg-blue-500/10' };
+};
+
+const formatVencimiento = (fechaStr?: string | null) => {
+  if (!fechaStr) return null;
+  const d = new Date(fechaStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const formatted = `${day}/${month}/${year}`;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const isExpired = d < todayStart;
+
+  return { formatted, isExpired };
+};
 
 export default function StudentDashboardPage() {
   const router = useRouter();
@@ -61,6 +100,7 @@ export default function StudentDashboardPage() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const [showTutorialModal, setShowTutorialModal] = useState(false);
+  const [selectedConceptTab, setSelectedConceptTab] = useState<'ANUAL' | 'MENSUAL'>('ANUAL');
 
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -106,12 +146,14 @@ export default function StudentDashboardPage() {
     setFeedbackMsg(null);
 
     try {
+      const currentMonthName = getCurrentMonthName();
       const res = await fetch('/api/student/report-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pagoId: selectedPago.id,
           numeroConfirmacion: confirmNumber.trim(),
+          mesColegiatura: selectedPago.tipo === 'MENSUAL' ? (selectedPago.mesColegiatura || currentMonthName) : undefined,
         }),
       });
 
@@ -350,122 +392,221 @@ export default function StudentDashboardPage() {
           </div>
         </section>
 
-        {/* Payments List Section (SIN MONTOS NI COSTOS) */}
+        {/* Payments List Section */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-cyan-400" />
-              <span>Estado de Conceptos de Pago</span>
-            </h3>
-            <span className="text-xs text-slate-400">Mostrando conceptos asignados a su nivel escolar</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-400" />
+                <span>Estado de Conceptos de Pago</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Seleccione la pestaña para consultar sus pagos anuales o colegiatura mensual
+              </p>
+            </div>
+
+            {/* Pestañas: Pago Anual y Pago Mensual */}
+            <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedConceptTab('ANUAL')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 border cursor-pointer ${
+                  selectedConceptTab === 'ANUAL'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Pago Anual</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 font-mono">
+                  {pagos.filter((p) => p.tipo === 'ANUAL').length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedConceptTab('MENSUAL')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 border cursor-pointer ${
+                  selectedConceptTab === 'MENSUAL'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>Pago Mensual</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 font-mono">
+                  {pagos.filter((p) => p.tipo === 'MENSUAL').length}
+                </span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {pagos.length === 0 ? (
+            {pagos.filter((p) => p.tipo === selectedConceptTab).length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-                No hay conceptos de pago registrados para su nivel escolar.
+                No hay conceptos de {selectedConceptTab === 'ANUAL' ? 'Pago Anual' : 'Pago Mensual'} registrados para su nivel escolar.
               </div>
             ) : (
-              pagos.map((pago) => {
-                const isPending = pago.estado === 'Pendiente';
-                const isReview = pago.estado === 'En Revisión';
-                const isConfirmed = pago.estado === 'Confirmado';
-                const isClarification = pago.estado === 'Requiere Aclaración';
+              pagos
+                .filter((pago) => pago.tipo === selectedConceptTab)
+                .map((pago) => {
+                  const isPending = pago.estado === 'Pendiente';
+                  const isReview = pago.estado === 'En Revisión';
+                  const isConfirmed = pago.estado === 'Confirmado';
+                  const isClarification = pago.estado === 'Requiere Aclaración';
 
-                return (
-                  <div
-                    key={pago.id}
-                    className={`bg-slate-900 border rounded-xl p-5 transition-all space-y-4 ${
-                      isConfirmed
-                        ? 'border-emerald-500/30 shadow-md shadow-emerald-500/5'
-                        : isReview
-                        ? 'border-blue-500/30'
-                        : isClarification
-                        ? 'border-red-500/50 bg-red-950/10'
-                        : 'border-amber-500/30'
-                    }`}
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-base font-bold text-white">{pago.concepto}</h4>
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                            {pago.tipo}
-                          </span>
+                  const currentMonthName = getCurrentMonthName();
+                  const displayConceptoName =
+                    pago.tipo === 'MENSUAL'
+                      ? `Colegiatura Mensual (${pago.mesColegiatura || currentMonthName})`
+                      : pago.concepto;
+
+                  const platformInfo = getPlatformLinkForConcept(pago.concepto);
+                  const vencimientoInfo = formatVencimiento(pago.fechaVencimiento);
+
+                  return (
+                    <div
+                      key={pago.id}
+                      className={`bg-slate-900 border rounded-xl p-5 transition-all space-y-4 ${
+                        isConfirmed
+                          ? 'border-emerald-500/30 shadow-md shadow-emerald-500/5'
+                          : isReview
+                          ? 'border-blue-500/30'
+                          : isClarification
+                          ? 'border-red-500/50 bg-red-950/10'
+                          : 'border-amber-500/30'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-base font-bold text-white">{displayConceptoName}</h4>
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                              {pago.tipo}
+                            </span>
+                          </div>
+
+                          {/* Fecha de Vencimiento */}
+                          {vencimientoInfo && (
+                            <div className="flex items-center gap-2 pt-0.5">
+                              <span
+                                className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                                  vencimientoInfo.isExpired && !isConfirmed
+                                    ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                                    : 'bg-slate-950 border-slate-800 text-slate-300'
+                                }`}
+                              >
+                                <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>Vencimiento: {vencimientoInfo.formatted}</span>
+                                {vencimientoInfo.isExpired && !isConfirmed && (
+                                  <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">
+                                    Vencido
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+
+                          {pago.numeroConfirmacion && (
+                            <p className="text-xs text-slate-400 pt-0.5">
+                              No. Confirmación reportado:{' '}
+                              <strong className="text-slate-200 font-mono">{pago.numeroConfirmacion}</strong>
+                            </p>
+                          )}
                         </div>
-                        {pago.numeroConfirmacion && (
-                          <p className="text-xs text-slate-400">
-                            No. Confirmación reportado:{' '}
-                            <strong className="text-slate-200 font-mono">{pago.numeroConfirmacion}</strong>
-                          </p>
-                        )}
+
+                        {/* Enlace directo a Plataforma correspondiente */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href={platformInfo.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${platformInfo.colorClass}`}
+                            title={`Ir a la plataforma ${platformInfo.name} para realizar el pago`}
+                          >
+                            <span>Ir a {platformInfo.name}</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
                       </div>
 
+                      {/* Texto / Nota del Administrador debajo del concepto */}
+                      {pago.notaConcepto && (
+                        <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 text-xs text-amber-200 space-y-1 animate-fade-in">
+                          <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Nota del Colegio / Instrucciones de Pago:</span>
+                          </div>
+                          <p className="text-slate-200 leading-relaxed pl-5">{pago.notaConcepto}</p>
+                        </div>
+                      )}
+
                       {/* Status Badges & Action Buttons */}
-                      <div className="flex items-center gap-3">
-                        {isConfirmed && (
-                          <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Confirmado</span>
-                          </div>
-                        )}
-
-                        {isReview && (
-                          <div className="px-3.5 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5 max-w-sm">
-                            <Clock className="w-4 h-4 text-blue-400 shrink-0" />
-                            <span>En Revisión: El colegio está verificando el reporte recibido. (Espere de 1 a 3 días)</span>
-                          </div>
-                        )}
-
-                        {isClarification && (
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                            <div className="px-3.5 py-1.5 rounded-xl bg-red-500/10 border border-red-500/40 text-red-400 text-xs font-bold flex items-center gap-1.5">
-                              <AlertTriangle className="w-4 h-4" />
-                              <span>Requiere Aclaración</span>
+                      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
+                        <div>
+                          {isConfirmed && (
+                            <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Confirmado</span>
                             </div>
-                            <button
-                              onClick={() => openClarifyModal(pago)}
-                              className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-md shadow-red-500/20"
-                            >
-                              <span>Responder Aclaración</span>
-                            </button>
-                          </div>
-                        )}
+                          )}
+
+                          {isReview && (
+                            <div className="px-3.5 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5 max-w-sm">
+                              <Clock className="w-4 h-4 text-blue-400 shrink-0" />
+                              <span>En Revisión: El colegio está verificando el reporte recibido. (Espere de 1 a 3 días)</span>
+                            </div>
+                          )}
+
+                          {isClarification && (
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                              <div className="px-3.5 py-1.5 rounded-xl bg-red-500/10 border border-red-500/40 text-red-400 text-xs font-bold flex items-center gap-1.5">
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>Requiere Aclaración</span>
+                              </div>
+                              <button
+                                onClick={() => openClarifyModal(pago)}
+                                className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-md shadow-red-500/20 cursor-pointer"
+                              >
+                                <span>Responder Aclaración</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
 
                         {isPending && (
                           <button
                             onClick={() => openReportModal(pago)}
-                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-500/20 flex items-center gap-1.5 active:scale-95"
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-500/20 flex items-center gap-1.5 active:scale-95 cursor-pointer"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>Reportar Pago</span>
                           </button>
                         )}
                       </div>
-                    </div>
 
-                    {/* Clarification reason notice if present */}
-                    {isClarification && (
-                      <div className="mt-3 p-4 rounded-xl bg-red-950/30 border border-red-500/30 space-y-2">
-                        <div className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>Motivo de Aclaración señalado por la administración:</span>
-                        </div>
-                        <p className="text-xs text-slate-200 italic bg-slate-950/60 p-2.5 rounded-lg border border-red-500/20">
-                          "{pago.motivoAclaracion || 'Por favor revise su folio de pago con la coordinación.'}"
-                        </p>
-
-                        {pago.respuestaAlumno && (
-                          <div className="text-xs text-slate-300 pt-1">
-                            <span className="font-semibold text-cyan-400">Su última respuesta enviada:</span>{' '}
-                            <span className="text-slate-200 font-mono">{pago.respuestaAlumno}</span>
+                      {/* Clarification reason notice if present */}
+                      {isClarification && (
+                        <div className="mt-3 p-4 rounded-xl bg-red-950/30 border border-red-500/30 space-y-2">
+                          <div className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span>Motivo de Aclaración señalado por la administración:</span>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+                          <p className="text-xs text-slate-200 italic bg-slate-950/60 p-2.5 rounded-lg border border-red-500/20">
+                            "{pago.motivoAclaracion || 'Por favor revise su folio de pago con la coordinación.'}"
+                          </p>
+
+                          {pago.respuestaAlumno && (
+                            <div className="text-xs text-slate-300 pt-1">
+                              <span className="font-semibold text-cyan-400">Su última respuesta enviada:</span>{' '}
+                              <span className="text-slate-200 font-mono">{pago.respuestaAlumno}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
             )}
           </div>
         </section>

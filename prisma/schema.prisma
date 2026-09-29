@@ -36,6 +36,9 @@ model Pago {
   motivoAclaracion   String?
   comentarioAdmin    String?
   respuestaAlumno    String?
+  notaConcepto       String?
+  mesColegiatura     String?
+  fechaVencimiento   DateTime?
   fechaReportado     DateTime?
   fechaConfirmado    DateTime?
   createdAt          DateTime  @default(now())

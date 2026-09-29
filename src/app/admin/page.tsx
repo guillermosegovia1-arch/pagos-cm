@@ -41,6 +41,9 @@ interface Pago {
   motivoAclaracion: string | null;
   comentarioAdmin: string | null;
   respuestaAlumno: string | null;
+  notaConcepto?: string | null;
+  mesColegiatura?: string | null;
+  fechaVencimiento?: string | null;
   fechaConfirmado: string | null;
   createdAt: string;
 }
@@ -103,6 +106,8 @@ export default function AdminDashboardPage() {
   const [pagoStatus, setPagoStatus] = useState<'Pendiente' | 'En Revisión' | 'Confirmado' | 'Requiere Aclaración'>('Pendiente');
   const [motivoAclaracion, setMotivoAclaracion] = useState('');
   const [comentarioAdmin, setComentarioAdmin] = useState('');
+  const [notaConcepto, setNotaConcepto] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [customFechaConfirmado, setCustomFechaConfirmado] = useState('');
 
   // Excel import state
@@ -507,6 +512,14 @@ export default function AdminDashboardPage() {
     setPagoStatus(pago.estado);
     setMotivoAclaracion(pago.motivoAclaracion || '');
     setComentarioAdmin(pago.comentarioAdmin || '');
+    setNotaConcepto(pago.notaConcepto || '');
+
+    if (pago.fechaVencimiento) {
+      const dV = new Date(pago.fechaVencimiento);
+      setFechaVencimiento(dV.toISOString().split('T')[0]);
+    } else {
+      setFechaVencimiento('');
+    }
 
     let defaultDateStr = '';
     if (pago.fechaConfirmado) {
@@ -534,6 +547,8 @@ export default function AdminDashboardPage() {
           estado: pagoStatus,
           motivoAclaracion: pagoStatus === 'Requiere Aclaración' ? motivoAclaracion : null,
           comentarioAdmin: comentarioAdmin.trim() || null,
+          notaConcepto: notaConcepto.trim() || null,
+          fechaVencimiento: fechaVencimiento ? fechaVencimiento : null,
           fechaConfirmado: pagoStatus === 'Confirmado' ? customFechaConfirmado : null,
         }),
       });
@@ -546,7 +561,7 @@ export default function AdminDashboardPage() {
 
       setFeedback({
         type: 'success',
-        text: `Estatus y comentarios del concepto "${editingPago.concepto}" guardados correctamente.`,
+        text: `Estatus, notas y vencimiento del concepto "${editingPago.concepto}" guardados correctamente.`,
       });
 
       setShowPaymentModal(false);
@@ -1766,6 +1781,33 @@ export default function AdminDashboardPage() {
               )}
 
               <div className="space-y-1.5">
+                <label className="block font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  Texto / Nota Debajo del Concepto (Visible para el Alumno)
+                </label>
+                <textarea
+                  value={notaConcepto}
+                  onChange={(e) => setNotaConcepto(e.target.value)}
+                  placeholder="Escriba texto explicativo o instrucciones que aparecerán justo debajo de este concepto..."
+                  rows={2}
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                  Fecha de Vencimiento de Pago
+                </label>
+                <input
+                  type="date"
+                  value={fechaVencimiento}
+                  onChange={(e) => setFechaVencimiento(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-cyan-500 text-xs font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <label className="block font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1">
                   <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
                   Escribir Comentario de la Administración
@@ -1774,7 +1816,7 @@ export default function AdminDashboardPage() {
                   value={comentarioAdmin}
                   onChange={(e) => setComentarioAdmin(e.target.value)}
                   placeholder="Escriba aquí observaciones del pago, número de lote bancario o notas internas..."
-                  rows={3}
+                  rows={2}
                   className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-xs"
                 />
               </div>

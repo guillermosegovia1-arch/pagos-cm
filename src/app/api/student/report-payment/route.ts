@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 const reportSchema = z.object({
   pagoId: z.string().min(1, 'El ID del pago es requerido'),
   numeroConfirmacion: z.string().min(1, 'El número de confirmación es obligatorio'),
+  mesColegiatura: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { pagoId, numeroConfirmacion } = parsed.data;
+    const { pagoId, numeroConfirmacion, mesColegiatura } = parsed.data;
 
     const pago = await prisma.pago.findUnique({
       where: { id: pagoId },
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
       data: {
         estado: 'En Revisión',
         numeroConfirmacion: numeroConfirmacion.trim(),
+        mesColegiatura: mesColegiatura ? mesColegiatura.trim() : pago.mesColegiatura,
         fechaReportado: new Date(),
       },
     });

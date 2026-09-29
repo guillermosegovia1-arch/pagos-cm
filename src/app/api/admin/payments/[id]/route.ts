@@ -9,6 +9,9 @@ const paymentUpdateSchema = z.object({
   estado: z.enum(['Pendiente', 'En Revisión', 'Confirmado', 'Requiere Aclaración']),
   motivoAclaracion: z.string().nullable().optional(),
   comentarioAdmin: z.string().nullable().optional(),
+  notaConcepto: z.string().nullable().optional(),
+  mesColegiatura: z.string().nullable().optional(),
+  fechaVencimiento: z.string().nullable().optional(),
   fechaConfirmado: z.string().nullable().optional(),
 });
 
@@ -37,7 +40,7 @@ export async function PUT(
       );
     }
 
-    const { estado, motivoAclaracion, comentarioAdmin, fechaConfirmado } = parsed.data;
+    const { estado, motivoAclaracion, comentarioAdmin, notaConcepto, mesColegiatura, fechaVencimiento, fechaConfirmado } = parsed.data;
 
     const existingPago = await prisma.pago.findUnique({ where: { id } });
 
@@ -58,6 +61,9 @@ export async function PUT(
         estado,
         motivoAclaracion: estado === 'Requiere Aclaración' ? motivoAclaracion?.trim() || 'Aclaración requerida por el colegio.' : null,
         comentarioAdmin: comentarioAdmin !== undefined ? comentarioAdmin?.trim() || null : existingPago?.comentarioAdmin,
+        notaConcepto: notaConcepto !== undefined ? notaConcepto?.trim() || null : existingPago?.notaConcepto,
+        mesColegiatura: mesColegiatura !== undefined ? mesColegiatura?.trim() || null : existingPago?.mesColegiatura,
+        fechaVencimiento: fechaVencimiento !== undefined ? (fechaVencimiento ? new Date(fechaVencimiento) : null) : existingPago?.fechaVencimiento,
         fechaConfirmado: finalFechaConfirmado,
       },
     });
