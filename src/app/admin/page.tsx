@@ -118,6 +118,10 @@ export default function AdminDashboardPage() {
   const [savingUser, setSavingUser] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Ciclo Escolar state
+  const [cicloEscolarInput, setCicloEscolarInput] = useState('2026 - 2027');
+  const [savingCiclo, setSavingCiclo] = useState(false);
+
   const fetchUsers = async () => {
     try {
       const res = await fetch('/api/admin/students');
@@ -138,11 +142,46 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     fetchUsers();
+    fetch('/api/settings/ciclo-escolar')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.cicloEscolar) setCicloEscolarInput(data.cicloEscolar);
+      })
+      .catch((err) => console.error('Error loading ciclo escolar setting:', err));
   }, []);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
+  };
+
+  const handleSaveCicloEscolar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cicloEscolarInput.trim()) return;
+
+    setSavingCiclo(true);
+    setFeedback(null);
+
+    try {
+      const res = await fetch('/api/admin/settings/ciclo-escolar', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cicloEscolar: cicloEscolarInput.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al guardar ciclo escolar');
+
+      setCicloEscolarInput(data.cicloEscolar);
+      setFeedback({
+        type: 'success',
+        text: `Ciclo escolar actualizado correctamente a "${data.cicloEscolar}". Visible en Login y Usuarios.`,
+      });
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message });
+    } finally {
+      setSavingCiclo(false);
+    }
   };
 
   // Selected status filter from Dashboard breakdown cards
@@ -754,6 +793,48 @@ export default function AdminDashboardPage() {
         {/* SECTION 1: DASHBOARD Y MÉTRICAS */}
         {activeTabSection === 'dashboard' && (
           <div className="space-y-6 animate-fade-in">
+            {/* CONFIGURACIÓN DEL CICLO ESCOLAR */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-cyan-400" />
+                    <span>Configuración del Ciclo Escolar Actual</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Este texto se mostrará públicamente en la pantalla de inicio de sesión (Login) y en el panel de cada alumno.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveCicloEscolar} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={cicloEscolarInput}
+                    onChange={(e) => setCicloEscolarInput(e.target.value)}
+                    placeholder="Ej. 2026 - 2027"
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-xs font-bold font-mono"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingCiclo}
+                  className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                >
+                  {savingCiclo ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Ciclo Escolar</span>
+                  )}
+                </button>
+              </form>
+            </div>
+
             {/* KPI Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Total Alumnos Activos */}

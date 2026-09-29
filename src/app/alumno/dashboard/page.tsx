@@ -101,6 +101,7 @@ export default function StudentDashboardPage() {
 
   const [showTutorialModal, setShowTutorialModal] = useState(false);
   const [selectedConceptTab, setSelectedConceptTab] = useState<'ANUAL' | 'MENSUAL'>('ANUAL');
+  const [cicloEscolar, setCicloEscolar] = useState('');
 
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -125,6 +126,12 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     fetchDashboard();
+    fetch('/api/settings/ciclo-escolar')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.cicloEscolar) setCicloEscolar(data.cicloEscolar);
+      })
+      .catch((err) => console.error('Error fetching ciclo escolar:', err));
   }, []);
 
   const handleLogout = async () => {
@@ -296,11 +303,20 @@ export default function StudentDashboardPage() {
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold">
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span>{user?.nivelEscolar}</span>
-                {user?.grado && user?.grupo && (
-                  <span className="text-cyan-300">• {user.grado}º "{user.grupo}"</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold">
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>{user?.nivelEscolar}</span>
+                  {user?.grado && user?.grupo && (
+                    <span className="text-cyan-300">• {user.grado}º "{user.grupo}"</span>
+                  )}
+                </div>
+
+                {cicloEscolar && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Ciclo Escolar {cicloEscolar}</span>
+                  </div>
                 )}
               </div>
               <h2 className="text-2xl font-extrabold text-white tracking-tight">{user?.nombre}</h2>

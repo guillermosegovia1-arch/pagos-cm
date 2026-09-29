@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, User, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { ShieldCheck, User, Lock, ArrowRight, Loader2, Calendar } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,6 +10,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cicloEscolar, setCicloEscolar] = useState('');
+
+  useEffect(() => {
+    fetch('/api/settings/ciclo-escolar')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.cicloEscolar) setCicloEscolar(data.cicloEscolar);
+      })
+      .catch((err) => console.error('Error loading ciclo escolar:', err));
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +78,13 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-slate-300 font-medium leading-snug">
             Portal de registro de pagos de Plataformas del Colegio Mexicano
           </p>
+
+          {cicloEscolar && (
+            <div className="mt-3.5 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 text-xs font-bold shadow-sm">
+              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Ciclo Escolar {cicloEscolar}</span>
+            </div>
+          )}
         </div>
 
         {/* Error Alert */}
