@@ -1168,13 +1168,12 @@ export default function AdminDashboardPage() {
                     <th className="p-3.5">Pago Lypro</th>
                     <th className="p-3.5">Cuota Escolar</th>
                     <th className="p-3.5">Colegiatura</th>
-                    <th className="p-3.5 text-center">Comentarios</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredUsers.filter(u => u.role === 'ALUMNO').length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-500 font-medium">
+                      <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
                         No hay alumnos registrados en el grupo "{selectedGroupTab}". Suba su archivo Excel para generar los grupos automáticamente.
                       </td>
                     </tr>
@@ -1232,8 +1231,6 @@ export default function AdminDashboardPage() {
                           );
                         };
 
-                        const totalCommentsCount = student.pagos.filter(p => p.comentarioAdmin).length;
-
                         return (
                           <tr key={student.id} className="hover:bg-slate-800/40 transition-colors">
                             <td className="p-3.5 font-bold text-slate-100 flex items-center gap-2">
@@ -1258,24 +1255,6 @@ export default function AdminDashboardPage() {
                             <td className="p-3.5">{renderStatusBadgeCell(lyproPago)}</td>
                             <td className="p-3.5">{renderStatusBadgeCell(escolarPago)}</td>
                             <td className="p-3.5">{renderStatusBadgeCell(colegiaturaPago)}</td>
-                            
-                            <td className="p-3.5 text-center">
-                              <button
-                                onClick={() => {
-                                  const firstPago = student.pagos[0];
-                                  if (firstPago) openEditPagoModal(firstPago, student.nombre);
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 text-xs font-semibold transition-all inline-flex items-center gap-1.5 border border-slate-700 hover:border-cyan-400"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>Comentarios</span>
-                                {totalCommentsCount > 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-extrabold ml-0.5">
-                                    {totalCommentsCount}
-                                  </span>
-                                )}
-                              </button>
-                            </td>
                           </tr>
                         );
                       })
