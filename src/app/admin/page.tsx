@@ -517,7 +517,13 @@ export default function AdminDashboardPage() {
         body: data,
       });
 
-      const result = await res.json();
+      const rawText = await res.text();
+      let result: any;
+      try {
+        result = JSON.parse(rawText);
+      } catch (parseErr) {
+        throw new Error('El servidor devolvió una respuesta no válida o la conexión expiró. Por favor intente de nuevo.');
+      }
 
       if (!res.ok) {
         throw new Error(result.error || 'Error al procesar el archivo');

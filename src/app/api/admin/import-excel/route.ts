@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cache password hashes to speed up bulk imports with duplicate/default passwords like "1234"
+    // Cache password hashes to maximize performance
     const passwordHashCache = new Map<string, string>();
     const getHashedPassword = async (pass: string) => {
       if (passwordHashCache.has(pass)) {
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       return hashed;
     };
 
-    // Pre-fetch all existing users and pagos to minimize DB round-trips
+    // Pre-fetch all existing users and pagos in 2 fast queries
     const allUsers = await prisma.user.findMany({
       select: { id: true, usuario: true },
     });
@@ -84,8 +84,21 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     const newUsersToCreate: Array<{
+      id: string;
       nombre: string;
       usuario: string;
+      password: string;
+      passwordPlain: string;
+      role: string;
+      nivelEscolar: string;
+      grado: string | null;
+      grupo: string | null;
+      estado: string;
+    }> = [];
+
+    const usersToUpdate: Array<{
+      id: string;
+      nombre: string;
       password: string;
       passwordPlain: string;
       role: string;
@@ -143,27 +156,26 @@ export async function POST(request: NextRequest) {
       const existingUserId = userMap.get(strUsuario.toLowerCase());
 
       if (existingUserId) {
-        await prisma.user.update({
-          where: { id: existingUserId },
-          data: {
-            nombre: strNombre,
-            password: hashedPassword,
-            passwordPlain: strPassword,
-            role: finalRole,
-            nivelEscolar: strNivel,
-            grado: finalGrado,
-            grupo: finalGrupo,
-            estado: 'Alta',
-          },
+        usersToUpdate.push({
+          id: existingUserId,
+          nombre: strNombre,
+          password: hashedPassword,
+          passwordPlain: strPassword,
+          role: finalRole,
+          nivelEscolar: strNivel,
+          grado: finalGrado,
+          grupo: finalGrupo,
+          estado: 'Alta',
         });
-        updatedCount++;
         processedUsers.push({
           userId: existingUserId,
           nivelEscolar: strNivel,
           role: finalRole,
         });
       } else {
+        const newId = crypto.randomUUID();
         newUsersToCreate.push({
+          id: newId,
           nombre: strNombre,
           usuario: strUsuario,
           password: hashedPassword,
@@ -174,25 +186,57 @@ export async function POST(request: NextRequest) {
           grupo: finalGrupo,
           estado: 'Alta',
         });
+        userMap.set(strUsuario.toLowerCase(), newId);
+        processedUsers.push({
+          userId: newId,
+          nivelEscolar: strNivel,
+          role: finalRole,
+        });
       }
     }
 
-    // Create new users sequentially to obtain IDs accurately
-    for (const uData of newUsersToCreate) {
-      const created = await prisma.user.create({
-        data: uData,
-      });
-      createdCount++;
-      userMap.set(uData.usuario.toLowerCase(), created.id);
-      processedUsers.push({
-        userId: created.id,
-        nivelEscolar: uData.nivelEscolar,
-        role: uData.role,
-      });
+    // 1. Batch create all new users using createMany in chunks of 200 (Instant execution)
+    if (newUsersToCreate.length > 0) {
+      const userChunkSize = 200;
+      for (let i = 0; i < newUsersToCreate.length; i += userChunkSize) {
+        const chunk = newUsersToCreate.slice(i, i + userChunkSize);
+        await prisma.user.createMany({
+          data: chunk,
+          skipDuplicates: true,
+        });
+      }
+      createdCount = newUsersToCreate.length;
     }
 
-    // Create missing payment concepts in bulk batch
+    // 2. Batch update existing users in parallel batches of 20
+    if (usersToUpdate.length > 0) {
+      const updateBatchSize = 20;
+      for (let i = 0; i < usersToUpdate.length; i += updateBatchSize) {
+        const batch = usersToUpdate.slice(i, i + updateBatchSize);
+        await Promise.all(
+          batch.map((u) =>
+            prisma.user.update({
+              where: { id: u.id },
+              data: {
+                nombre: u.nombre,
+                password: u.password,
+                passwordPlain: u.passwordPlain,
+                role: u.role,
+                nivelEscolar: u.nivelEscolar,
+                grado: u.grado,
+                grupo: u.grupo,
+                estado: u.estado,
+              },
+            })
+          )
+        );
+      }
+      updatedCount = usersToUpdate.length;
+    }
+
+    // 3. Batch create all missing payment concepts using createMany in chunks of 500
     const newPagosToCreate: Array<{
+      id: string;
       userId: string;
       concepto: string;
       tipo: string;
@@ -206,6 +250,7 @@ export async function POST(request: NextRequest) {
           const key = `${item.userId}_${rc.concepto}`;
           if (!existingPagoSet.has(key)) {
             newPagosToCreate.push({
+              id: crypto.randomUUID(),
               userId: item.userId,
               concepto: rc.concepto,
               tipo: rc.tipo,
@@ -218,11 +263,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (newPagosToCreate.length > 0) {
-      const chunkSize = 500;
-      for (let i = 0; i < newPagosToCreate.length; i += chunkSize) {
-        const chunk = newPagosToCreate.slice(i, i + chunkSize);
+      const pagoChunkSize = 500;
+      for (let i = 0; i < newPagosToCreate.length; i += pagoChunkSize) {
+        const chunk = newPagosToCreate.slice(i, i + pagoChunkSize);
         await prisma.pago.createMany({
           data: chunk,
+          skipDuplicates: true,
         });
       }
     }
