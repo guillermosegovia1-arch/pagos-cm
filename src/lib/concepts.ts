@@ -1,4 +1,6 @@
 export const NIVELES_ESCOLARES = [
+  'Pre - Maternal',
+  'Maternal',
   'Pre-Maternal y Maternal',
   'Kínder 1',
   'Kínder 2',
@@ -17,17 +19,27 @@ export interface ConceptDefinition {
 }
 
 export function getConceptosForNivel(nivel: string): ConceptDefinition[] {
-  if (!nivel || nivel === 'No aplica') {
+  if (!nivel || nivel.trim().toLowerCase() === 'no aplica') {
     return [];
   }
 
-  const result: ConceptDefinition[] = [];
+  const normalized = nivel
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 
-  const isPreMaternalMaternal = nivel === 'Pre-Maternal y Maternal';
-  const isKinder = nivel.startsWith('Kínder');
-  const isPrimaria = nivel === 'Primaria';
-  const isSecundaria = nivel === 'Secundaria';
-  const isPreparatoria = nivel === 'Preparatoria';
+  const isPreMaternalMaternal =
+    normalized.includes('maternal') ||
+    normalized.includes('pre-maternal') ||
+    normalized.includes('pre maternal');
+
+  const isKinder = normalized.includes('kinder');
+  const isPrimaria = normalized.includes('primaria');
+  const isSecundaria = normalized.includes('secundaria');
+  const isPreparatoria = normalized.includes('preparatoria') || normalized.includes('prepa');
+
+  const result: ConceptDefinition[] = [];
 
   // Knotion (Anual): Kínder 1 a 3, Primaria, Secundaria.
   if (isKinder || isPrimaria || isSecundaria) {
