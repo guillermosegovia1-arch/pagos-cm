@@ -194,9 +194,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 1. Batch create all new users using createMany in chunks of 200 (Instant execution)
+    // 1. Batch create all new users using createMany in chunks of 100
     if (newUsersToCreate.length > 0) {
-      const userChunkSize = 200;
+      const userChunkSize = 100;
       for (let i = 0; i < newUsersToCreate.length; i += userChunkSize) {
         const chunk = newUsersToCreate.slice(i, i + userChunkSize);
         await prisma.user.createMany({
@@ -207,9 +207,9 @@ export async function POST(request: NextRequest) {
       createdCount = newUsersToCreate.length;
     }
 
-    // 2. Batch update existing users in parallel batches of 20
+    // 2. Batch update existing users in small controlled batches of 10
     if (usersToUpdate.length > 0) {
-      const updateBatchSize = 20;
+      const updateBatchSize = 10;
       for (let i = 0; i < usersToUpdate.length; i += updateBatchSize) {
         const batch = usersToUpdate.slice(i, i + updateBatchSize);
         await Promise.all(
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
       updatedCount = usersToUpdate.length;
     }
 
-    // 3. Batch create all missing payment concepts using createMany in chunks of 500
+    // 3. Batch create all missing payment concepts using createMany in chunks of 300
     const newPagosToCreate: Array<{
       id: string;
       userId: string;
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (newPagosToCreate.length > 0) {
-      const pagoChunkSize = 500;
+      const pagoChunkSize = 300;
       for (let i = 0; i < newPagosToCreate.length; i += pagoChunkSize) {
         const chunk = newPagosToCreate.slice(i, i + pagoChunkSize);
         await prisma.pago.createMany({
