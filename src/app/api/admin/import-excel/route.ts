@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
     const errors: string[] = [];
 
-    const userRecordsToUpsert: Array<{
+    // Deduplicate user records by lowercased username in memory to prevent Postgres ON CONFLICT duplicate row error
+    const userRecordsMap = new Map<string, {
       id: string;
       nombre: string;
       usuario: string;
@@ -88,13 +89,13 @@ export async function POST(request: NextRequest) {
       grado: string | null;
       grupo: string | null;
       estado: string;
-    }> = [];
+    }>();
 
-    const processedUsersForPagos: Array<{
+    const processedUsersForPagosMap = new Map<string, {
       usuario: string;
       nivelEscolar: string;
       role: string;
-    }> = [];
+    }>();
 
     for (let i = 0; i < rawData.length; i++) {
       const row = rawData[i];
@@ -135,11 +136,14 @@ export async function POST(request: NextRequest) {
       const finalGrupo = isNoAplica ? null : strGrupo;
 
       const hashedPassword = await getHashedPassword(strPassword);
-      const existingId = existingUserMap.get(strUsuario.toLowerCase());
+      const userKey = strUsuario.toLowerCase();
+      const existingId = existingUserMap.get(userKey) || userRecordsMap.get(userKey)?.id;
 
       if (existingId) {
-        updatedCount++;
-        userRecordsToUpsert.push({
+        if (!userRecordsMap.has(userKey) && existingUserMap.has(userKey)) {
+          updatedCount++;
+        }
+        userRecordsMap.set(userKey, {
           id: existingId,
           nombre: strNombre,
           usuario: strUsuario,
@@ -154,8 +158,8 @@ export async function POST(request: NextRequest) {
       } else {
         createdCount++;
         const newId = crypto.randomUUID();
-        existingUserMap.set(strUsuario.toLowerCase(), newId);
-        userRecordsToUpsert.push({
+        existingUserMap.set(userKey, newId);
+        userRecordsMap.set(userKey, {
           id: newId,
           nombre: strNombre,
           usuario: strUsuario,
@@ -169,12 +173,15 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      processedUsersForPagos.push({
-        usuario: strUsuario.toLowerCase(),
+      processedUsersForPagosMap.set(userKey, {
+        usuario: userKey,
         nivelEscolar: strNivel,
         role: finalRole,
       });
     }
+
+    const userRecordsToUpsert = Array.from(userRecordsMap.values());
+    const processedUsersForPagos = Array.from(processedUsersForPagosMap.values());
 
     // Subrequests 2..N: Multi-row SQL UPSERT for Users in chunks of 150 rows (~7 subrequests total for 989 users)
     if (userRecordsToUpsert.length > 0) {
