@@ -76,6 +76,7 @@ export default function AdminDashboardPage() {
 
   // Modals state
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserStudent | null>(null);
 
   // Form state for Create / Edit user
@@ -589,8 +590,8 @@ export default function AdminDashboardPage() {
 
           <div className="flex items-center gap-4">
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all"
+              onClick={() => setShowLogoutModal(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Cerrar Sesión</span>
@@ -1711,6 +1712,39 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE CERRAR SESIÓN */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-5">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shadow-inner">
+              <LogOut className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-lg font-extrabold text-white">¿Cerrar Sesión?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                ¿Estás seguro de que deseas salir de la plataforma?
+              </p>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors shadow-lg shadow-rose-600/25 border border-rose-500 cursor-pointer"
+              >
+                Sí, Cerrar Sesión
+              </button>
+            </div>
           </div>
         </div>
       )}
