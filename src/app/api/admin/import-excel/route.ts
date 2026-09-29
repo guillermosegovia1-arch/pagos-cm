@@ -194,22 +194,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 1. Batch create all new users using createMany in chunks of 100
+    // 1. Create new users in parallel batches of 25 (No transactions needed for HTTP mode)
     if (newUsersToCreate.length > 0) {
-      const userChunkSize = 100;
-      for (let i = 0; i < newUsersToCreate.length; i += userChunkSize) {
-        const chunk = newUsersToCreate.slice(i, i + userChunkSize);
-        await prisma.user.createMany({
-          data: chunk,
-          skipDuplicates: true,
-        });
+      const userBatchSize = 25;
+      for (let i = 0; i < newUsersToCreate.length; i += userBatchSize) {
+        const batch = newUsersToCreate.slice(i, i + userBatchSize);
+        await Promise.all(
+          batch.map((u) =>
+            prisma.user.create({
+              data: u,
+            })
+          )
+        );
       }
       createdCount = newUsersToCreate.length;
     }
 
-    // 2. Batch update existing users in small controlled batches of 10
+    // 2. Update existing users in parallel batches of 15 (No transactions needed for HTTP mode)
     if (usersToUpdate.length > 0) {
-      const updateBatchSize = 10;
+      const updateBatchSize = 15;
       for (let i = 0; i < usersToUpdate.length; i += updateBatchSize) {
         const batch = usersToUpdate.slice(i, i + updateBatchSize);
         await Promise.all(
@@ -233,7 +236,7 @@ export async function POST(request: NextRequest) {
       updatedCount = usersToUpdate.length;
     }
 
-    // 3. Batch create all missing payment concepts using createMany in chunks of 300
+    // 3. Create missing payment concepts in parallel batches of 50 (No transactions needed for HTTP mode)
     const newPagosToCreate: Array<{
       id: string;
       userId: string;
@@ -262,13 +265,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (newPagosToCreate.length > 0) {
-      const pagoChunkSize = 300;
-      for (let i = 0; i < newPagosToCreate.length; i += pagoChunkSize) {
-        const chunk = newPagosToCreate.slice(i, i + pagoChunkSize);
-        await prisma.pago.createMany({
-          data: chunk,
-          skipDuplicates: true,
-        });
+      const pagoBatchSize = 50;
+      for (let i = 0; i < newPagosToCreate.length; i += pagoBatchSize) {
+        const batch = newPagosToCreate.slice(i, i + pagoBatchSize);
+        await Promise.all(
+          batch.map((p) =>
+            prisma.pago.create({
+              data: p,
+            })
+          )
+        );
       }
     }
 
