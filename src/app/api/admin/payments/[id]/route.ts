@@ -47,7 +47,8 @@ export async function PUT(
     let finalFechaConfirmado = existingPago?.fechaConfirmado;
     if (estado === 'Confirmado') {
       if (fechaConfirmado) {
-        finalFechaConfirmado = new Date(fechaConfirmado);
+        const iso = fechaConfirmado.includes('T') ? fechaConfirmado : `${fechaConfirmado}T12:00:00`;
+        finalFechaConfirmado = new Date(iso);
       } else if (!existingPago?.fechaConfirmado) {
         finalFechaConfirmado = new Date();
       }
@@ -63,7 +64,7 @@ export async function PUT(
         comentarioAdmin: comentarioAdmin !== undefined ? comentarioAdmin?.trim() || null : existingPago?.comentarioAdmin,
         notaConcepto: notaConcepto !== undefined ? notaConcepto?.trim() || null : existingPago?.notaConcepto,
         mesColegiatura: mesColegiatura !== undefined ? mesColegiatura?.trim() || null : existingPago?.mesColegiatura,
-        fechaVencimiento: fechaVencimiento !== undefined ? (fechaVencimiento ? new Date(fechaVencimiento) : null) : existingPago?.fechaVencimiento,
+        fechaVencimiento: fechaVencimiento !== undefined ? (fechaVencimiento ? new Date(fechaVencimiento.includes('T') ? fechaVencimiento : `${fechaVencimiento}T12:00:00`) : null) : existingPago?.fechaVencimiento,
         fechaConfirmado: finalFechaConfirmado,
       },
     });

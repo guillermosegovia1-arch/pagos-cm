@@ -186,12 +186,40 @@ export default function AdminDashboardPage() {
 
   // Selected status filter from Dashboard breakdown cards
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'TODOS' | 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración'>('TODOS');
+  const [statusDateFilter, setStatusDateFilter] = useState<string | null>(null);
+
+  // Helper para normalizar y extraer YYYY-MM-DD sin desfase de zona horaria
+  const getLocalDateString = (dateInput: string | Date | null | undefined): string | null => {
+    if (!dateInput) return null;
+    if (typeof dateInput === 'string') {
+      if (dateInput.includes('T00:00:00')) {
+        return dateInput.split('T')[0];
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+        return dateInput;
+      }
+    }
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return null;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper para comparar fechas con string ISO (YYYY-MM-DD)
+  const isSameDayString = (dateInput: string | Date | null | undefined, targetISO: string): boolean => {
+    const localDate = getLocalDateString(dateInput);
+    if (!localDate) return false;
+    return localDate === targetISO;
+  };
 
   // Cambiar de pestaña: al cambiar a Dashboard, Gestión o Importación, se quita el filtrado
   const handleTabChange = (section: 'dashboard' | 'verificacion' | 'gestion' | 'importacion') => {
     setActiveTabSection(section);
     if (section !== 'verificacion') {
       setSelectedStatusFilter('TODOS');
+      setStatusDateFilter(null);
     }
   };
 
@@ -199,6 +227,7 @@ export default function AdminDashboardPage() {
   const handleLogoClick = () => {
     setActiveTabSection('dashboard');
     setSelectedStatusFilter('TODOS');
+    setStatusDateFilter(null);
     setSearchQuery('');
     setStartDateFilter(thirtyDaysAgo);
     setEndDateFilter(todayStr);
@@ -213,6 +242,7 @@ export default function AdminDashboardPage() {
       if (activeTabSection !== 'dashboard') {
         setActiveTabSection('dashboard');
         setSelectedStatusFilter('TODOS');
+        setStatusDateFilter(null);
         window.history.pushState({ page: 'admin', tab: 'dashboard' }, '', window.location.href);
       } else {
         window.history.pushState({ page: 'admin', tab: 'dashboard' }, '', window.location.href);
@@ -228,6 +258,7 @@ export default function AdminDashboardPage() {
     filterDate?: string
   ) => {
     setSelectedStatusFilter(status);
+    setStatusDateFilter(filterDate || null);
     if (filterDate) {
       setStartDateFilter(filterDate);
       setEndDateFilter(filterDate);
@@ -257,7 +288,14 @@ export default function AdminDashboardPage() {
 
       // If status filter is active, check if student has matching pagos
       if (selectedStatusFilter !== 'TODOS') {
-        const hasMatchingPago = u.pagos.some((p) => p.estado === selectedStatusFilter);
+        const hasMatchingPago = u.pagos.some((p) => {
+          if (p.estado !== selectedStatusFilter) return false;
+          if (statusDateFilter) {
+            if (!p.fechaConfirmado) return false;
+            return isSameDayString(p.fechaConfirmado, statusDateFilter);
+          }
+          return true;
+        });
         if (!hasMatchingPago) return;
       }
 
@@ -272,7 +310,7 @@ export default function AdminDashboardPage() {
     });
 
     return Array.from(map.entries());
-  }, [users, selectedStatusFilter]);
+  }, [users, selectedStatusFilter, statusDateFilter]);
 
   // Set default group tab if current selected group is not in list
   useEffect(() => {
@@ -301,7 +339,14 @@ export default function AdminDashboardPage() {
 
       // Status filter matching
       if (selectedStatusFilter !== 'TODOS') {
-        const hasMatchingPago = u.pagos.some((p) => p.estado === selectedStatusFilter);
+        const hasMatchingPago = u.pagos.some((p) => {
+          if (p.estado !== selectedStatusFilter) return false;
+          if (statusDateFilter) {
+            if (!p.fechaConfirmado) return false;
+            return isSameDayString(p.fechaConfirmado, statusDateFilter);
+          }
+          return true;
+        });
         if (!hasMatchingPago) return false;
       }
 
@@ -317,7 +362,7 @@ export default function AdminDashboardPage() {
 
       return true;
     });
-  }, [users, selectedGroupTab, searchQuery, selectedStatusFilter]);
+  }, [users, selectedGroupTab, searchQuery, selectedStatusFilter, statusDateFilter]);
 
   // Metric Calculation for Dashboard
   const metrics = useMemo(() => {
@@ -338,22 +383,22 @@ export default function AdminDashboardPage() {
     const yesterdayDate = new Date(now);
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
 
-    const isSameDay = (dateStr: string | null, targetDate: Date) => {
-      if (!dateStr) return false;
-      const d = new Date(dateStr);
-      return (
-        d.getFullYear() === targetDate.getFullYear() &&
-        d.getMonth() === targetDate.getMonth() &&
-        d.getDate() === targetDate.getDate()
-      );
+    const getISO = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
+    const todayISO = getISO(now);
+    const yesterdayISO = getISO(yesterdayDate);
+
     const todayConfirmedCount = confirmedPagos.filter((p) =>
-      isSameDay(p.fechaConfirmado || p.createdAt, now)
+      p.fechaConfirmado && isSameDayString(p.fechaConfirmado, todayISO)
     ).length;
 
     const yesterdayConfirmedCount = confirmedPagos.filter((p) =>
-      isSameDay(p.fechaConfirmado || p.createdAt, yesterdayDate)
+      p.fechaConfirmado && isSameDayString(p.fechaConfirmado, yesterdayISO)
     ).length;
 
     const formatDayDisplay = (d: Date) => {
@@ -365,16 +410,6 @@ export default function AdminDashboardPage() {
 
     const todayFormatted = formatDayDisplay(now);
     const yesterdayFormatted = formatDayDisplay(yesterdayDate);
-
-    const getISO = (d: Date) => {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const todayISO = getISO(now);
-    const yesterdayISO = getISO(yesterdayDate);
 
     // Students with at least 1 confirmed payment
     const studentsWhoPaidCount = studentsOnly.filter((u) =>
@@ -449,13 +484,13 @@ export default function AdminDashboardPage() {
   const filteredConfirmedPaymentsByRange = useMemo(() => {
     if (!startDateFilter && !endDateFilter) return confirmedPaymentsList;
 
-    const start = startDateFilter ? new Date(`${startDateFilter}T00:00:00`) : new Date(0);
-    const end = endDateFilter ? new Date(`${endDateFilter}T23:59:59`) : new Date();
-
     return confirmedPaymentsList.filter((item) => {
       if (!item.fechaConfirmado) return false;
-      const confirmDate = new Date(item.fechaConfirmado);
-      return confirmDate >= start && confirmDate <= end;
+      const ymd = getLocalDateString(item.fechaConfirmado);
+      if (!ymd) return false;
+      if (startDateFilter && ymd < startDateFilter) return false;
+      if (endDateFilter && ymd > endDateFilter) return false;
+      return true;
     });
   }, [confirmedPaymentsList, startDateFilter, endDateFilter]);
 
@@ -598,10 +633,9 @@ export default function AdminDashboardPage() {
 
     let defaultDateStr = '';
     if (pago.fechaConfirmado) {
-      const d = new Date(pago.fechaConfirmado);
-      defaultDateStr = d.toISOString().split('T')[0];
+      defaultDateStr = getLocalDateString(pago.fechaConfirmado) || '';
     } else {
-      defaultDateStr = new Date().toISOString().split('T')[0];
+      defaultDateStr = getLocalDateString(new Date()) || '';
     }
     setCustomFechaConfirmado(defaultDateStr);
 
@@ -696,9 +730,10 @@ export default function AdminDashboardPage() {
   // Helper date formatter
   const formatDateDisplay = (dateString?: string | null) => {
     if (!dateString) return null;
-    const d = new Date(dateString);
-    if (isNaN(d.getTime())) return null;
-
+    const ymd = getLocalDateString(dateString);
+    if (!ymd) return null;
+    const [year, month, day] = ymd.split('-').map(Number);
+    const d = new Date(year, month - 1, day, 12, 0, 0);
     return d.toLocaleDateString('es-MX', {
       day: '2-digit',
       month: 'short',
@@ -1282,8 +1317,8 @@ export default function AdminDashboardPage() {
             {/* Banner de filtro activo */}
             {selectedStatusFilter !== 'TODOS' && (
               <div className="px-4 py-2.5 bg-cyan-500/10 border-b border-cyan-500/20 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400 font-medium">Filtrado activo por estatus:</span>
+                <div className="flex items-center gap-2 text-xs flex-wrap">
+                  <span className="text-slate-400 font-medium">Filtrado activo:</span>
                   <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
                     selectedStatusFilter === 'Confirmado'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
@@ -1294,11 +1329,26 @@ export default function AdminDashboardPage() {
                       : 'bg-red-500/20 text-red-300 border-red-500/40'
                   }`}>
                     {selectedStatusFilter}
+                    {statusDateFilter === metrics.todayISO
+                      ? ' · Solo Hoy'
+                      : statusDateFilter === metrics.yesterdayISO
+                      ? ' · Solo Ayer'
+                      : statusDateFilter
+                      ? ` · ${statusDateFilter}`
+                      : ''}
                   </span>
+                  {statusDateFilter && (
+                    <span className="text-[11px] text-emerald-400 font-medium">
+                      (Mostrando únicamente los conceptos confirmados en esta fecha)
+                    </span>
+                  )}
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedStatusFilter('TODOS')}
+                  onClick={() => {
+                    setSelectedStatusFilter('TODOS');
+                    setStatusDateFilter(null);
+                  }}
                   className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold cursor-pointer px-2 py-1 rounded-lg hover:bg-cyan-500/10 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -1326,7 +1376,7 @@ export default function AdminDashboardPage() {
                   {filteredUsers.filter(u => u.role === 'ALUMNO').length === 0 ? (
                     <tr>
                       <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
-                        No hay alumnos registrados en el grupo "{selectedGroupTab}". Suba su archivo Excel para generar los grupos automáticamente.
+                        No hay alumnos con pagos en este criterio en el grupo "{selectedGroupTab}".
                       </td>
                     </tr>
                   ) : (
@@ -1334,6 +1384,23 @@ export default function AdminDashboardPage() {
                       .filter((u) => u.role === 'ALUMNO')
                       .map((student) => {
                         const getPagoByConceptName = (keyword: string) => {
+                          if (statusDateFilter) {
+                            return student.pagos.find(
+                              (p) =>
+                                p.concepto.toLowerCase().includes(keyword.toLowerCase()) &&
+                                p.estado === 'Confirmado' &&
+                                p.fechaConfirmado &&
+                                isSameDayString(p.fechaConfirmado, statusDateFilter)
+                            );
+                          }
+                          if (selectedStatusFilter !== 'TODOS') {
+                            const matchStatus = student.pagos.find(
+                              (p) =>
+                                p.concepto.toLowerCase().includes(keyword.toLowerCase()) &&
+                                p.estado === selectedStatusFilter
+                            );
+                            if (matchStatus) return matchStatus;
+                          }
                           return student.pagos.find((p) => p.concepto.toLowerCase().includes(keyword.toLowerCase()));
                         };
 
@@ -1344,19 +1411,50 @@ export default function AdminDashboardPage() {
                         const knotionPago = getPagoByConceptName('knotion');
                         const lyproPago = getPagoByConceptName('lypro');
 
-                        // Si hay filtro por estatus activo, seleccionar la colegiatura que coincida
+                        // Si hay filtro por fecha (Hoy/Ayer), solo seleccionar colegiatura confirmada en esa fecha
                         const colegiaturaPago =
-                          selectedStatusFilter !== 'TODOS'
+                          statusDateFilter
+                            ? student.pagos.find(
+                                (p) =>
+                                  (p.tipo === 'MENSUAL' || p.concepto.toLowerCase().includes('colegiatura')) &&
+                                  p.estado === 'Confirmado' &&
+                                  p.fechaConfirmado &&
+                                  isSameDayString(p.fechaConfirmado, statusDateFilter)
+                              )
+                            : selectedStatusFilter !== 'TODOS'
                             ? student.pagos.find(
                                 (p) =>
                                   (p.tipo === 'MENSUAL' || p.concepto.toLowerCase().includes('colegiatura')) &&
                                   p.estado === selectedStatusFilter
-                              ) || getPagoByConceptName('colegiatura')
-                            : getPagoByConceptName('colegiatura');
+                              ) || student.pagos.find(
+                                (p) =>
+                                  (p.tipo === 'MENSUAL' || p.concepto.toLowerCase().includes('colegiatura'))
+                              )
+                            : student.pagos.find(
+                                (p) =>
+                                  (p.tipo === 'MENSUAL' || p.concepto.toLowerCase().includes('colegiatura'))
+                              );
 
                         const renderStatusBadgeCell = (pago?: Pago) => {
                           if (!pago) {
-                            return <span className="text-slate-600 italic">No Aplica</span>;
+                            return <span className="text-slate-700 font-mono text-center block">-</span>;
+                          }
+
+                          // Si hay filtro por fecha (Confirmados Hoy / Confirmados Ayer), SOLO mostrar si se confirmó en esa fecha
+                          if (statusDateFilter) {
+                            if (!pago.fechaConfirmado || pago.estado !== 'Confirmado') {
+                              return <span className="text-slate-700 font-mono text-center block">-</span>;
+                            }
+                            const matchesDate = isSameDayString(pago.fechaConfirmado, statusDateFilter);
+                            if (!matchesDate) {
+                              return <span className="text-slate-700 font-mono text-center block">-</span>;
+                            }
+                          } else if (selectedStatusFilter !== 'TODOS') {
+                            // Si se filtró por un estatus específico (ej. Confirmado, En Revisión, etc.)
+                            // NO mostrar nada si el pago corresponde a otro estatus
+                            if (pago.estado !== selectedStatusFilter) {
+                              return <span className="text-slate-700 font-mono text-center block">-</span>;
+                            }
                           }
 
                           let badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
