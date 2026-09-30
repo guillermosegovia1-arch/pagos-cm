@@ -24,6 +24,7 @@ import {
   ChevronRight,
   BookOpen,
   Info,
+  Youtube,
 } from 'lucide-react';
 
 interface Pago {
@@ -925,6 +926,38 @@ export default function StudentDashboardPage() {
                         <div className="mx-5 mb-3 p-3 rounded-xl bg-teal-950/20 border border-teal-500/20 text-xs flex items-start gap-2">
                           <Info className="w-3.5 h-3.5 text-teal-400 flex-shrink-0 mt-0.5" />
                           <p className="text-teal-200">{vencConcepto.nota}</p>
+                        </div>
+                      )}
+
+                      {/* Knotion video tutorials */}
+                      {platformInfo.name === 'Knotion' && (
+                        <div className="mx-5 mb-3 rounded-xl border border-teal-500/25 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-2.5 bg-teal-500/10 border-b border-teal-500/20">
+                            <Youtube className="w-4 h-4 text-red-400 flex-shrink-0" />
+                            <span className="text-xs font-bold text-teal-200">Videos Tutorial de Knotion</span>
+                            <span className="ml-auto text-[10px] text-teal-400/70 font-medium">¿Cómo realizar tu pago?</span>
+                          </div>
+                          <div className="divide-y divide-teal-500/10 bg-slate-950/40">
+                            {[
+                              { label: 'Pago de Knotion — Nuevo Ingreso', url: 'https://youtu.be/TEbc-QFv_zA' },
+                              { label: 'Proceso para Asociar otro Alumno', url: 'https://youtu.be/IZlRnAxl9KE' },
+                              { label: 'Proceso para Padres que ya tienen Usuario', url: 'https://youtu.be/Cz9QvNV2PQs' },
+                            ].map((video) => (
+                              <a
+                                key={video.url}
+                                href={video.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 px-4 py-2.5 group hover:bg-teal-500/10 transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-lg bg-red-500/15 border border-red-500/25 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500/25 transition-colors">
+                                  <PlayCircle className="w-4 h-4 text-red-400" />
+                                </div>
+                                <span className="text-xs text-slate-300 group-hover:text-white transition-colors flex-1">{video.label}</span>
+                                <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-teal-400 transition-colors flex-shrink-0" />
+                              </a>
+                            ))}
+                          </div>
                         </div>
                       )}
 
