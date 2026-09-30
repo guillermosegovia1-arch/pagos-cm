@@ -668,6 +668,25 @@ export default function StudentDashboardPage() {
   const [clarifyResponse, setClarifyResponse] = useState('');
   const [showClarifyModal, setShowClarifyModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // Evitar salir de la sesión al presionar botón Atrás en el navegador
+  useEffect(() => {
+    window.history.pushState({ page: 'alumno' }, '', window.location.href);
+    const handlePopState = () => {
+      window.history.pushState({ page: 'alumno' }, '', window.location.href);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleLogoClick = () => {
+    setSelectedConceptTab('ANUAL');
+    setStatusFilter(null);
+    setConceptFilter(null);
+    setHighlightedPagoId(null);
+    setShowNotifPanel(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const [showTutorialModal, setShowTutorialModal] = useState(false);
   const [selectedConceptTab, setSelectedConceptTab] = useState<'ANUAL' | 'MENSUAL'>('ANUAL');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -839,18 +858,23 @@ export default function StudentDashboardPage() {
       <header className="sticky top-0 z-30 bg-[#080c14]/90 backdrop-blur-xl border-b border-slate-800/60">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
 
-          {/* Brand */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
+          {/* Brand interactivo */}
+          <button
+            type="button"
+            onClick={handleLogoClick}
+            className="flex items-center gap-3 text-left cursor-pointer group hover:opacity-90 transition-opacity"
+            title="Ir al inicio del Alumno y quitar filtros"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0 group-hover:scale-105 transition-transform">
               <BookOpen className="w-5 h-5 text-white" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-sm font-black text-white tracking-tight">
+              <h1 className="text-sm font-black text-white tracking-tight group-hover:text-cyan-200 transition-colors">
                 Pagos<span className="text-cyan-400">CM</span>
               </h1>
               <p className="text-[10px] text-slate-500 leading-none">Portal de Plataformas · Colegio Mexicano</p>
             </div>
-          </div>
+          </button>
 
           {/* Right actions */}
           <div className="flex items-center gap-2">

@@ -44,11 +44,11 @@ export default function LoginPage() {
         throw new Error(data.error || 'Error al iniciar sesión');
       }
 
-      // Fast transition based on role
+      // Fast transition based on role (replace to avoid back button going to login)
       if (data.user?.role === 'ADMIN') {
-        router.push('/admin');
+        router.replace('/admin');
       } else {
-        router.push('/alumno/dashboard');
+        router.replace('/alumno/dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Error de conexión');

@@ -187,6 +187,42 @@ export default function AdminDashboardPage() {
   // Selected status filter from Dashboard breakdown cards
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'TODOS' | 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración'>('TODOS');
 
+  // Cambiar de pestaña: al cambiar a Dashboard, Gestión o Importación, se quita el filtrado
+  const handleTabChange = (section: 'dashboard' | 'verificacion' | 'gestion' | 'importacion') => {
+    setActiveTabSection(section);
+    if (section !== 'verificacion') {
+      setSelectedStatusFilter('TODOS');
+    }
+  };
+
+  // Clic en el logotipo: regresa al Dashboard inicial y quita todos los filtros
+  const handleLogoClick = () => {
+    setActiveTabSection('dashboard');
+    setSelectedStatusFilter('TODOS');
+    setSearchQuery('');
+    setStartDateFilter(thirtyDaysAgo);
+    setEndDateFilter(todayStr);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Prevenir que el botón "Atrás" del navegador cierre la sesión
+  useEffect(() => {
+    window.history.pushState({ page: 'admin', tab: activeTabSection }, '', window.location.href);
+
+    const handlePopState = () => {
+      if (activeTabSection !== 'dashboard') {
+        setActiveTabSection('dashboard');
+        setSelectedStatusFilter('TODOS');
+        window.history.pushState({ page: 'admin', tab: 'dashboard' }, '', window.location.href);
+      } else {
+        window.history.pushState({ page: 'admin', tab: 'dashboard' }, '', window.location.href);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTabSection]);
+
   const handleStatusCardClick = (
     status: 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración',
     filterDate?: string
@@ -684,19 +720,24 @@ export default function AdminDashboardPage() {
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
+          <button
+            type="button"
+            onClick={handleLogoClick}
+            className="flex items-center gap-3 text-left cursor-pointer group hover:opacity-90 transition-opacity"
+            title="Ir al inicio del Administrador y quitar filtros"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2 group-hover:text-cyan-200 transition-colors">
                 Pagos<span className="text-cyan-400">CM</span>
               </h1>
               <p className="text-xs text-slate-400 hidden sm:block">
                 Portal de registro de pagos de Plataformas del Colegio Mexicano
               </p>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center gap-4">
             <button
@@ -731,8 +772,8 @@ export default function AdminDashboardPage() {
         <div className="flex items-center justify-between border-b border-slate-800 pb-2 overflow-x-auto gap-4">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setActiveTabSection('dashboard')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+              onClick={() => handleTabChange('dashboard')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
                 activeTabSection === 'dashboard'
                   ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
                   : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
@@ -743,8 +784,8 @@ export default function AdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => setActiveTabSection('verificacion')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+              onClick={() => handleTabChange('verificacion')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
                 activeTabSection === 'verificacion'
                   ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
                   : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
@@ -755,8 +796,8 @@ export default function AdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => setActiveTabSection('gestion')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+              onClick={() => handleTabChange('gestion')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
                 activeTabSection === 'gestion'
                   ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
                   : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
@@ -767,8 +808,8 @@ export default function AdminDashboardPage() {
             </button>
 
             <button
-              onClick={() => setActiveTabSection('importacion')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+              onClick={() => handleTabChange('importacion')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
                 activeTabSection === 'importacion'
                   ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
                   : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
@@ -1238,23 +1279,53 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
+            {/* Banner de filtro activo */}
+            {selectedStatusFilter !== 'TODOS' && (
+              <div className="px-4 py-2.5 bg-cyan-500/10 border-b border-cyan-500/20 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400 font-medium">Filtrado activo por estatus:</span>
+                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
+                    selectedStatusFilter === 'Confirmado'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : selectedStatusFilter === 'En Revisión'
+                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                      : selectedStatusFilter === 'Pendiente'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-red-500/20 text-red-300 border-red-500/40'
+                  }`}>
+                    {selectedStatusFilter}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('TODOS')}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold cursor-pointer px-2 py-1 rounded-lg hover:bg-cyan-500/10 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Quitar filtro y ver todos los conceptos
+                </button>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-950/80 text-slate-300 font-bold uppercase border-b border-slate-800">
                     <th className="p-3.5 min-w-[200px]">Nombre del Alumno</th>
                     <th className="p-3.5">Nivel / Grupo</th>
-                    <th className="p-3.5">Pago Knotion</th>
+                    <th className="p-3.5">Inscripción / Reinscripción</th>
                     <th className="p-3.5">Cuota Tecnología</th>
-                    <th className="p-3.5">Pago Lypro</th>
+                    <th className="p-3.5">Cuota Material</th>
                     <th className="p-3.5">Cuota Escolar</th>
+                    <th className="p-3.5">Pago Knotion</th>
+                    <th className="p-3.5">Pago Lypro</th>
                     <th className="p-3.5">Colegiatura</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredUsers.filter(u => u.role === 'ALUMNO').length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
+                      <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
                         No hay alumnos registrados en el grupo "{selectedGroupTab}". Suba su archivo Excel para generar los grupos automáticamente.
                       </td>
                     </tr>
@@ -1266,11 +1337,22 @@ export default function AdminDashboardPage() {
                           return student.pagos.find((p) => p.concepto.toLowerCase().includes(keyword.toLowerCase()));
                         };
 
-                        const knotionPago = getPagoByConceptName('Knotion');
-                        const techPago = getPagoByConceptName('tecnología');
-                        const lyproPago = getPagoByConceptName('Lypro');
+                        const inscripcionPago = getPagoByConceptName('inscripci');
+                        const techPago = getPagoByConceptName('tecnolog');
+                        const materialPago = getPagoByConceptName('material') || getPagoByConceptName('materia');
                         const escolarPago = getPagoByConceptName('escolar');
-                        const colegiaturaPago = getPagoByConceptName('Colegiatura');
+                        const knotionPago = getPagoByConceptName('knotion');
+                        const lyproPago = getPagoByConceptName('lypro');
+
+                        // Si hay filtro por estatus activo, seleccionar la colegiatura que coincida
+                        const colegiaturaPago =
+                          selectedStatusFilter !== 'TODOS'
+                            ? student.pagos.find(
+                                (p) =>
+                                  (p.tipo === 'MENSUAL' || p.concepto.toLowerCase().includes('colegiatura')) &&
+                                  p.estado === selectedStatusFilter
+                              ) || getPagoByConceptName('colegiatura')
+                            : getPagoByConceptName('colegiatura');
 
                         const renderStatusBadgeCell = (pago?: Pago) => {
                           if (!pago) {
@@ -1297,10 +1379,13 @@ export default function AdminDashboardPage() {
                             <div className="flex flex-col items-start gap-1">
                               <button
                                 onClick={() => openEditPagoModal(pago, student.nombre)}
-                                className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 hover:scale-105 transition-transform ${badgeColor}`}
-                                title={`Editar ${pago.concepto}`}
+                                className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 hover:scale-105 transition-transform cursor-pointer ${badgeColor}`}
+                                title={`Editar ${pago.concepto}${pago.mesColegiatura ? ` (${pago.mesColegiatura})` : ''}`}
                               >
                                 <span>{label}</span>
+                                {pago.tipo === 'MENSUAL' && pago.mesColegiatura && (
+                                  <span className="text-[9px] opacity-75 font-mono">({pago.mesColegiatura.slice(0, 3)})</span>
+                                )}
                               </button>
 
                               {pago.estado === 'Confirmado' && (
@@ -1331,10 +1416,12 @@ export default function AdminDashboardPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="p-3.5">{renderStatusBadgeCell(knotionPago)}</td>
+                            <td className="p-3.5">{renderStatusBadgeCell(inscripcionPago)}</td>
                             <td className="p-3.5">{renderStatusBadgeCell(techPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(lyproPago)}</td>
+                            <td className="p-3.5">{renderStatusBadgeCell(materialPago)}</td>
                             <td className="p-3.5">{renderStatusBadgeCell(escolarPago)}</td>
+                            <td className="p-3.5">{renderStatusBadgeCell(knotionPago)}</td>
+                            <td className="p-3.5">{renderStatusBadgeCell(lyproPago)}</td>
                             <td className="p-3.5">{renderStatusBadgeCell(colegiaturaPago)}</td>
                           </tr>
                         );

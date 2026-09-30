@@ -41,14 +41,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Login page redirect if already logged in
-  if (pathname === '/login') {
+  // Login or root page redirect if already logged in
+  if (pathname === '/login' || pathname === '/') {
     if (session) {
       if (session.role === 'ADMIN') {
         return NextResponse.redirect(new URL('/admin', request.url));
       } else {
         return NextResponse.redirect(new URL('/alumno/dashboard', request.url));
       }
+    } else if (pathname === '/') {
+      return NextResponse.redirect(new URL('/login', request.url));
     }
   }
 
@@ -56,5 +58,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/alumno/:path*', '/login'],
+  matcher: ['/', '/admin/:path*', '/alumno/:path*', '/login'],
 };
