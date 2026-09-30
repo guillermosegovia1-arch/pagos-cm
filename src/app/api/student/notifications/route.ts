@@ -55,6 +55,8 @@ export async function GET(request: NextRequest) {
       titulo,
       mensaje,
       tipo,
+      pagoTipo: p.tipo,
+      mesColegiatura: p.mesColegiatura,
       concepto: p.concepto,
       estado: p.estado,
       fechaActualizacion: p.updatedAt.toISOString(),

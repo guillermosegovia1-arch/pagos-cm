@@ -31,9 +31,12 @@ import {
 
 interface Notificacion {
   id: string;
+  pagoId?: string;
   titulo: string;
   mensaje: string;
   tipo: 'confirmado' | 'revision' | 'aclaracion';
+  pagoTipo?: 'ANUAL' | 'MENSUAL';
+  mesColegiatura?: string | null;
   concepto: string;
   estado: string;
   fechaActualizacion: string;
@@ -553,6 +556,42 @@ export default function StudentDashboardPage() {
     }, 50);
   };
 
+  const [highlightedPagoId, setHighlightedPagoId] = useState<string | null>(null);
+
+  const handleNotificationClick = (notif: Notificacion) => {
+    setShowNotifPanel(false);
+
+    // Encontrar pago coincidente si existe
+    const matchedPago =
+      pagos.find((p) => (notif.pagoId && p.id === notif.pagoId) || p.id === notif.id) ||
+      pagos.find((p) => p.concepto.toLowerCase().trim() === notif.concepto.toLowerCase().trim());
+
+    const targetTab: 'ANUAL' | 'MENSUAL' =
+      matchedPago?.tipo === 'MENSUAL' || notif.pagoTipo === 'MENSUAL' || notif.concepto.toLowerCase().includes('colegiatura')
+        ? 'MENSUAL'
+        : 'ANUAL';
+
+    setSelectedConceptTab(targetTab);
+    setStatusFilter(null);
+    setConceptFilter(null);
+
+    const targetId = matchedPago ? matchedPago.id : (notif.pagoId || notif.id);
+    setHighlightedPagoId(targetId);
+
+    setTimeout(() => {
+      const el = document.getElementById(`pago-card-${targetId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
+
+    setTimeout(() => {
+      setHighlightedPagoId((prev) => (prev === targetId ? null : prev));
+    }, 4500);
+  };
+
   const [selectedPago, setSelectedPago] = useState<Pago | null>(null);
   const [confirmNumber, setConfirmNumber] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
@@ -844,10 +883,12 @@ export default function StudentDashboardPage() {
                                 : Clock;
 
                             return (
-                              <div
+                              <button
                                 key={notif.id}
-                                className={`flex gap-3 px-4 py-3 transition-colors ${
-                                  isNew ? 'bg-cyan-500/5 hover:bg-cyan-500/8' : 'hover:bg-slate-800/40'
+                                type="button"
+                                onClick={() => handleNotificationClick(notif)}
+                                className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer group hover:bg-slate-800/60 ${
+                                  isNew ? 'bg-cyan-500/5' : ''
                                 }`}
                               >
                                 <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 mt-0.5 ${iconColor}`}>
@@ -855,21 +896,27 @@ export default function StudentDashboardPage() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between gap-2">
-                                    <p className="text-xs font-bold text-white leading-tight">
+                                    <p className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors leading-tight">
                                       {notif.titulo}
                                     </p>
-                                    {isNew && (
-                                      <span className="flex-shrink-0 w-2 h-2 rounded-full bg-cyan-400 mt-1" />
-                                    )}
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {isNew && (
+                                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                                      )}
+                                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+                                    </div>
                                   </div>
                                   <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed line-clamp-2">
                                     {notif.mensaje}
                                   </p>
-                                  <p className="text-[10px] text-slate-600 mt-1">
-                                    {fechaStr} · {horaStr}
-                                  </p>
+                                  <div className="flex items-center justify-between mt-1.5 text-[10px] text-slate-500">
+                                    <span>{fechaStr} · {horaStr}</span>
+                                    <span className="text-cyan-400 font-semibold group-hover:text-cyan-300 flex items-center gap-0.5">
+                                      Ver concepto →
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
@@ -1171,10 +1218,17 @@ export default function StudentDashboardPage() {
                     ? 'bg-red-400'
                     : 'bg-amber-400';
 
+                  const isHighlighted = highlightedPagoId === pago.id;
+
                   return (
                     <div
+                      id={`pago-card-${pago.id}`}
                       key={pago.id}
-                      className={`bg-slate-900/80 border ${borderClass} rounded-2xl overflow-hidden transition-all hover:shadow-lg`}
+                      className={`bg-slate-900/80 border ${
+                        isHighlighted
+                          ? 'border-cyan-400 ring-4 ring-cyan-400/40 shadow-2xl shadow-cyan-500/30 scale-[1.01]'
+                          : borderClass
+                      } rounded-2xl overflow-hidden transition-all duration-500 hover:shadow-lg scroll-mt-24`}
                     >
                       {/* Card header */}
                       <div className="flex items-start gap-4 p-5">
@@ -1190,6 +1244,12 @@ export default function StudentDashboardPage() {
                             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
                               {pago.tipo}
                             </span>
+                            {isHighlighted && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 animate-pulse flex items-center gap-1">
+                                <Bell className="w-2.5 h-2.5" />
+                                Concepto seleccionado
+                              </span>
+                            )}
                           </div>
 
                           {/* Date from DB */}
