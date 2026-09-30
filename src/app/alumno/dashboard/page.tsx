@@ -370,53 +370,86 @@ const MonthlyCalendar: React.FC<{ pagos: Pago[]; nivel: string }> = ({ pagos, ni
 
 // ── Due Dates Info Panel ──────────────────────────────────────────────────────
 
-const DueDatesPanel: React.FC<{ nivel: string }> = ({ nivel }) => {
+const DueDatesPanel: React.FC<{
+  nivel: string;
+  onConceptClick: (keyword: string, tab: 'ANUAL' | 'MENSUAL') => void;
+}> = ({ nivel, onConceptClick }) => {
   const esPrepa = isPreparatoria(nivel);
 
-  const items = [
+  const items: {
+    concepto: string;
+    keyword: string;
+    tab: 'ANUAL' | 'MENSUAL';
+    vencimiento: string;
+    nota?: string;
+    color: string;
+    hoverColor: string;
+    icon: string;
+  }[] = [
     {
       concepto: 'Inscripción / Reinscripción',
+      keyword: 'inscripci',
+      tab: 'ANUAL',
       vencimiento: esPrepa ? '10 de Julio · 10 de Enero' : '10 de Agosto',
       nota: esPrepa ? 'Dos periodos para Preparatoria' : undefined,
       color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      hoverColor: 'hover:border-sky-400/60 hover:bg-sky-500/10',
       icon: '📋',
     },
     {
       concepto: 'Cuota de Tecnología',
+      keyword: 'tecnolog',
+      tab: 'ANUAL',
       vencimiento: '10 de Agosto',
       color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      hoverColor: 'hover:border-sky-400/60 hover:bg-sky-500/10',
       icon: '💻',
     },
     {
       concepto: 'Cuota de Materia',
+      keyword: 'materia',
+      tab: 'ANUAL',
       vencimiento: '10 de Agosto',
       color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      hoverColor: 'hover:border-sky-400/60 hover:bg-sky-500/10',
       icon: '📚',
     },
     {
       concepto: 'Cuota Escolar Anual',
+      keyword: 'escolar',
+      tab: 'ANUAL',
       vencimiento: '10 de Agosto',
       color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      hoverColor: 'hover:border-sky-400/60 hover:bg-sky-500/10',
       icon: '🏫',
     },
     {
       concepto: 'Knotion',
+      keyword: 'knotion',
+      tab: 'ANUAL',
       vencimiento: '31 de Agosto',
       nota: 'Precio especial hasta el 31 Ago. Incrementa a partir del 1° Sep.',
       color: 'border-teal-500/30 bg-teal-500/5 text-teal-300',
+      hoverColor: 'hover:border-teal-400/60 hover:bg-teal-500/10',
       icon: '🖥️',
     },
     {
       concepto: 'Lypro',
+      keyword: 'lypro',
+      tab: 'ANUAL',
       vencimiento: '30 de Septiembre',
       color: 'border-rose-500/30 bg-rose-500/5 text-rose-300',
+      hoverColor: 'hover:border-rose-400/60 hover:bg-rose-500/10',
       icon: '📖',
     },
     {
       concepto: 'Colegiatura Mensual',
+      keyword: 'colegiatura',
+      tab: 'MENSUAL',
       vencimiento: 'Día 10 de cada mes',
       nota: 'A partir del día 11 se aplican recargos por pago extemporáneo.',
       color: 'border-amber-500/30 bg-amber-500/5 text-amber-300',
+      hoverColor: 'hover:border-amber-400/60 hover:bg-amber-500/10',
       icon: '📅',
     },
   ];
@@ -429,20 +462,22 @@ const DueDatesPanel: React.FC<{ nivel: string }> = ({ nivel }) => {
         </div>
         <div>
           <h3 className="text-sm font-bold text-white">Fechas de Vencimiento de Conceptos</h3>
-          <p className="text-[10px] text-slate-500">Realice sus pagos antes de las fechas indicadas</p>
+          <p className="text-[10px] text-slate-500">Haz click en un concepto para ver su estado de pago</p>
         </div>
       </div>
 
       <div className="space-y-2">
         {items.map((item) => (
-          <div
+          <button
             key={item.concepto}
-            className={`flex items-start gap-3 p-3 rounded-xl border ${item.color} transition-all`}
+            type="button"
+            onClick={() => onConceptClick(item.keyword, item.tab)}
+            className={`w-full flex items-start gap-3 p-3 rounded-xl border ${item.color} ${item.hoverColor} transition-all cursor-pointer group text-left`}
           >
             <span className="text-base mt-0.5 flex-shrink-0">{item.icon}</span>
             <div className="flex-1 min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                <span className="text-xs font-bold text-slate-200">{item.concepto}</span>
+                <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{item.concepto}</span>
                 <span className="text-xs font-black whitespace-nowrap">{item.vencimiento}</span>
               </div>
               {item.nota && (
@@ -452,7 +487,8 @@ const DueDatesPanel: React.FC<{ nivel: string }> = ({ nivel }) => {
                 </p>
               )}
             </div>
-          </div>
+            <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-slate-600 group-hover:text-slate-300 transition-colors" />
+          </button>
         ))}
       </div>
     </div>
@@ -502,6 +538,16 @@ export default function StudentDashboardPage() {
   const scrollToPayments = (tab: 'ANUAL' | 'MENSUAL', filter?: string | null) => {
     setSelectedConceptTab(tab);
     setStatusFilter(filter ?? null);
+    setConceptFilter(null);
+    setTimeout(() => {
+      paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const scrollToConcepto = (keyword: string, tab: 'ANUAL' | 'MENSUAL') => {
+    setSelectedConceptTab(tab);
+    setStatusFilter(null);
+    setConceptFilter(keyword);
     setTimeout(() => {
       paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
@@ -518,6 +564,7 @@ export default function StudentDashboardPage() {
   const [showTutorialModal, setShowTutorialModal] = useState(false);
   const [selectedConceptTab, setSelectedConceptTab] = useState<'ANUAL' | 'MENSUAL'>('ANUAL');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [conceptFilter, setConceptFilter] = useState<string | null>(null);
   const [cicloEscolar, setCicloEscolar] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -982,7 +1029,7 @@ export default function StudentDashboardPage() {
         {user && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <MonthlyCalendar pagos={pagos} nivel={user.nivelEscolar} />
-            <DueDatesPanel nivel={user.nivelEscolar} />
+            <DueDatesPanel nivel={user.nivelEscolar} onConceptClick={scrollToConcepto} />
           </div>
         )}
 
@@ -996,7 +1043,23 @@ export default function StudentDashboardPage() {
                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Estado de Conceptos</h2>
               </div>
 
-              {/* Filtro activo badge */}
+              {/* Filtro por concepto activo */}
+              {conceptFilter && (
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border bg-cyan-500/15 border-cyan-500/30 text-cyan-300">
+                    📌 {conceptFilter.charAt(0).toUpperCase() + conceptFilter.slice(1)}
+                  </span>
+                  <button
+                    onClick={() => setConceptFilter(null)}
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800 transition-colors border border-slate-700/60"
+                  >
+                    <X className="w-3 h-3" />
+                    Ver todos
+                  </button>
+                </div>
+              )}
+
+              {/* Filtro por estado activo */}
               {statusFilter && (
                 <div className="flex items-center gap-1.5">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
@@ -1026,7 +1089,7 @@ export default function StudentDashboardPage() {
                 <button
                   key={tab}
                   type="button"
-                  onClick={() => { setSelectedConceptTab(tab); setStatusFilter(null); }}
+                  onClick={() => { setSelectedConceptTab(tab); setStatusFilter(null); setConceptFilter(null); }}
                   className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer border ${
                     selectedConceptTab === tab
                       ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
@@ -1048,7 +1111,8 @@ export default function StudentDashboardPage() {
             {(() => {
               const filteredPagos = pagos
                 .filter((p) => p.tipo === selectedConceptTab)
-                .filter((p) => !statusFilter || p.estado === statusFilter);
+                .filter((p) => !statusFilter || p.estado === statusFilter)
+                .filter((p) => !conceptFilter || p.concepto.toLowerCase().includes(conceptFilter.toLowerCase()) || (selectedConceptTab === 'MENSUAL' && conceptFilter === 'colegiatura'));
 
               if (filteredPagos.length === 0) {
                 return (
