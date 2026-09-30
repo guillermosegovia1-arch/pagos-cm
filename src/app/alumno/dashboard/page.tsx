@@ -115,6 +115,19 @@ const formatVencimiento = (fechaStr?: string | null) => {
   return { formatted, isExpired };
 };
 
+/** Calcula el estado del vencimiento mensual (día 10 de cada mes) */
+const getMensualDueInfo = () => {
+  const today = new Date();
+  const day = today.getDate();
+  const hasRecargo = day > 10;
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  ];
+  const monthName = monthNames[today.getMonth()];
+  return { hasRecargo, day, monthName };
+};
+
 const getPlatformInfo = (concepto: string) => {
   const norm = concepto.toLowerCase();
   if (norm.includes('knotion')) {
@@ -376,6 +389,13 @@ const DueDatesPanel: React.FC<{ nivel: string }> = ({ nivel }) => {
       vencimiento: '30 de Septiembre',
       color: 'border-rose-500/30 bg-rose-500/5 text-rose-300',
       icon: '📖',
+    },
+    {
+      concepto: 'Colegiatura Mensual',
+      vencimiento: 'Día 10 de cada mes',
+      nota: 'A partir del día 11 se aplican recargos por pago extemporáneo.',
+      color: 'border-amber-500/30 bg-amber-500/5 text-amber-300',
+      icon: '📅',
     },
   ];
 
@@ -889,6 +909,26 @@ export default function StudentDashboardPage() {
                             </div>
                           )}
 
+                          {/* Colegiatura mensual: vencimiento día 10 */}
+                          {pago.tipo === 'MENSUAL' && !isConfirmed && (() => {
+                            const { hasRecargo, monthName } = getMensualDueInfo();
+                            return (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                                  hasRecargo
+                                    ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                }`}>
+                                  <Calendar className="w-3 h-3" />
+                                  Vence: día 10 de {monthName}
+                                  {hasRecargo && (
+                                    <span className="text-[9px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded uppercase ml-1">Con recargo</span>
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })()}
+
                           {pago.numeroConfirmacion && (
                             <p className="text-xs text-slate-400">
                               Folio: <strong className="text-slate-200 font-mono">{pago.numeroConfirmacion}</strong>
@@ -918,6 +958,19 @@ export default function StudentDashboardPage() {
                             Nota del Colegio:
                           </div>
                           <p className="text-slate-200 pl-5">{pago.notaConcepto}</p>
+                        </div>
+                      )}
+
+                      {/* Colegiatura mensual: alerta de recargo */}
+                      {pago.tipo === 'MENSUAL' && !isConfirmed && getMensualDueInfo().hasRecargo && (
+                        <div className="mx-5 mb-3 p-3 rounded-xl bg-red-950/30 border border-red-500/40 text-xs flex items-start gap-2.5">
+                          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold text-red-300">¡Pago con recargo!</p>
+                            <p className="text-red-200/80 mt-0.5">
+                              El vencimiento de la colegiatura mensual es el <strong>día 10</strong>. A partir del día 11 se aplican recargos por pago extemporáneo. Regularice su situación a la brevedad.
+                            </p>
+                          </div>
                         </div>
                       )}
 
