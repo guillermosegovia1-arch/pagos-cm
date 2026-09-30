@@ -1123,15 +1123,17 @@ export default function StudentDashboardPage() {
                     <p className="text-slate-400 text-sm">
                       {statusFilter
                         ? `No hay pagos con estado "${statusFilter}" en esta categoría.`
+                        : conceptFilter
+                        ? `No se encontraron conceptos para "${conceptFilter}".`
                         : `No hay conceptos de ${selectedConceptTab === 'ANUAL' ? 'Pago Anual' : 'Colegiatura Mensual'} registrados.`}
                     </p>
-                    {statusFilter && (
+                    {(statusFilter || conceptFilter) && (
                       <button
-                        onClick={() => setStatusFilter(null)}
+                        onClick={() => { setStatusFilter(null); setConceptFilter(null); }}
                         className="mx-auto flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 px-3 py-1.5 rounded-xl border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors"
                       >
                         <X className="w-3.5 h-3.5" />
-                        Quitar filtro y ver todos
+                        Quitar filtros y ver todos
                       </button>
                     )}
                   </div>
