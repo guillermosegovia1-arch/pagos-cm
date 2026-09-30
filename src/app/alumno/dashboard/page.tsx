@@ -25,7 +25,19 @@ import {
   BookOpen,
   Info,
   Youtube,
+  Bell,
+  CheckCheck,
 } from 'lucide-react';
+
+interface Notificacion {
+  id: string;
+  titulo: string;
+  mensaje: string;
+  tipo: 'confirmado' | 'revision' | 'aclaracion';
+  concepto: string;
+  estado: string;
+  fechaActualizacion: string;
+}
 
 interface Pago {
   id: string;
@@ -507,6 +519,33 @@ export default function StudentDashboardPage() {
   const [cicloEscolar, setCicloEscolar] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Notificaciones
+  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [lastSeenTs, setLastSeenTs] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pagos_cm_notif_seen') || '1970-01-01T00:00:00.000Z';
+    }
+    return '1970-01-01T00:00:00.000Z';
+  });
+
+  const unreadCount = notificaciones.filter(
+    (n) => new Date(n.fechaActualizacion) > new Date(lastSeenTs)
+  ).length;
+
+  const markAllRead = () => {
+    const now = new Date().toISOString();
+    setLastSeenTs(now);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pagos_cm_notif_seen', now);
+    }
+  };
+
+  const openNotifPanel = () => {
+    setShowNotifPanel(true);
+    markAllRead();
+  };
+
   const fetchDashboard = async () => {
     try {
       const res = await fetch('/api/student/dashboard');
@@ -525,6 +564,11 @@ export default function StudentDashboardPage() {
     fetch('/api/settings/ciclo-escolar')
       .then((r) => r.json())
       .then((d) => { if (d.cicloEscolar) setCicloEscolar(d.cicloEscolar); })
+      .catch((e) => console.error(e));
+    // Cargar notificaciones
+    fetch('/api/student/notifications')
+      .then((r) => r.json())
+      .then((d) => { if (d.notificaciones) setNotificaciones(d.notificaciones); })
       .catch((e) => console.error(e));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -661,6 +705,131 @@ export default function StudentDashboardPage() {
               <HelpCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">¿Cómo pagar?</span>
             </button>
+
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                onClick={openNotifPanel}
+                className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 hover:border-slate-600 transition-all"
+                title="Notificaciones"
+              >
+                <Bell className="w-4 h-4 text-slate-300" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-[#080c14] animate-bounce">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notifications dropdown panel */}
+              {showNotifPanel && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowNotifPanel(false)}
+                  />
+                  {/* Panel */}
+                  <div className="absolute right-0 top-11 z-50 w-80 sm:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/60">
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-bold text-white">Notificaciones</span>
+                        {notificaciones.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400 font-mono">
+                            {notificaciones.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {unreadCount === 0 && notificaciones.length > 0 && (
+                          <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <CheckCheck className="w-3 h-3" />
+                            Todo leído
+                          </span>
+                        )}
+                        <button
+                          onClick={() => setShowNotifPanel(false)}
+                          className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* List */}
+                    <div className="max-h-[420px] overflow-y-auto">
+                      {notificaciones.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center">
+                            <Bell className="w-6 h-6 text-slate-500" />
+                          </div>
+                          <p className="text-sm text-slate-400">Sin notificaciones por ahora</p>
+                          <p className="text-xs text-slate-600">Cuando el colegio realice cambios en tus pagos, aparecerán aquí.</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-800/80">
+                          {notificaciones.map((notif) => {
+                            const isNew = new Date(notif.fechaActualizacion) > new Date(lastSeenTs);
+                            const fecha = new Date(notif.fechaActualizacion);
+                            const fechaStr = fecha.toLocaleDateString('es-MX', {
+                              day: '2-digit', month: 'short', year: 'numeric',
+                            });
+                            const horaStr = fecha.toLocaleTimeString('es-MX', {
+                              hour: '2-digit', minute: '2-digit',
+                            });
+
+                            const iconColor =
+                              notif.tipo === 'confirmado'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : notif.tipo === 'aclaracion'
+                                ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                                : 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+
+                            const Icon =
+                              notif.tipo === 'confirmado'
+                                ? CheckCircle2
+                                : notif.tipo === 'aclaracion'
+                                ? AlertTriangle
+                                : Clock;
+
+                            return (
+                              <div
+                                key={notif.id}
+                                className={`flex gap-3 px-4 py-3 transition-colors ${
+                                  isNew ? 'bg-cyan-500/5 hover:bg-cyan-500/8' : 'hover:bg-slate-800/40'
+                                }`}
+                              >
+                                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 mt-0.5 ${iconColor}`}>
+                                  <Icon className="w-4 h-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-xs font-bold text-white leading-tight">
+                                      {notif.titulo}
+                                    </p>
+                                    {isNew && (
+                                      <span className="flex-shrink-0 w-2 h-2 rounded-full bg-cyan-400 mt-1" />
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed line-clamp-2">
+                                    {notif.mensaje}
+                                  </p>
+                                  <p className="text-[10px] text-slate-600 mt-1">
+                                    {fechaStr} · {horaStr}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             <button
               onClick={() => setShowLogoutModal(true)}
