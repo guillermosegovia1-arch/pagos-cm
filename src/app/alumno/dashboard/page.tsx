@@ -172,6 +172,7 @@ interface StatCardProps {
   color: 'blue' | 'amber' | 'green' | 'red';
   progress: number; // 0-100
   sublabel?: string;
+  onClick?: () => void;
 }
 
 const colorMap = {
@@ -209,11 +210,12 @@ const colorMap = {
   },
 };
 
-const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, progress, sublabel }) => {
+const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, progress, sublabel, onClick }) => {
   const c = colorMap[color];
   return (
     <div
-      className={`relative bg-slate-900/80 border border-slate-800 rounded-2xl p-5 ring-1 ${c.ring} overflow-hidden group hover:scale-[1.02] transition-transform duration-200 cursor-default`}
+      onClick={onClick}
+      className={`relative bg-slate-900/80 border border-slate-800 rounded-2xl p-5 ring-1 ${c.ring} overflow-hidden group hover:scale-[1.02] transition-transform duration-200 ${onClick ? 'cursor-pointer hover:border-slate-600' : 'cursor-default'}`}
     >
       {/* glow */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
@@ -224,7 +226,15 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, progress
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.icon} text-sm`}>
           {icon}
         </div>
-        <span className={`text-2xl font-black tracking-tight ${c.value}`}>{value}</span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`text-2xl font-black tracking-tight ${c.value}`}>{value}</span>
+          {onClick && (
+            <span className="text-[10px] text-slate-500 group-hover:text-slate-300 transition-colors flex items-center gap-0.5 font-medium">
+              Ver detalle
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          )}
+        </div>
       </div>
 
       <p className="text-xs font-semibold text-slate-300 leading-tight">{label}</p>
@@ -473,6 +483,16 @@ export default function StudentDashboardPage() {
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Ref para scroll a la sección de pagos
+  const paymentsRef = React.useRef<HTMLElement>(null);
+
+  const scrollToPayments = (tab: 'ANUAL' | 'MENSUAL') => {
+    setSelectedConceptTab(tab);
+    setTimeout(() => {
+      paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
 
   const [selectedPago, setSelectedPago] = useState<Pago | null>(null);
   const [confirmNumber, setConfirmNumber] = useState('');
@@ -755,6 +775,7 @@ export default function StudentDashboardPage() {
               color="blue"
               progress={totalAnual > 0 ? (enRevisionAnual / totalAnual) * 100 : 0}
               sublabel="El colegio está verificando"
+              onClick={() => scrollToPayments('ANUAL')}
             />
             <StatCard
               label="Pagos Anuales Confirmados"
@@ -763,6 +784,7 @@ export default function StudentDashboardPage() {
               color="green"
               progress={totalAnual > 0 ? (confirmadosAnual / totalAnual) * 100 : 0}
               sublabel="Validados por administración"
+              onClick={() => scrollToPayments('ANUAL')}
             />
             <StatCard
               label="Pagos Anuales Pendientes"
@@ -771,6 +793,7 @@ export default function StudentDashboardPage() {
               color="amber"
               progress={totalAnual > 0 ? (pendientesAnual / totalAnual) * 100 : 0}
               sublabel="Sin reportar aún"
+              onClick={() => scrollToPayments('ANUAL')}
             />
             <StatCard
               label="Colegiaturas del Ciclo"
@@ -779,6 +802,7 @@ export default function StudentDashboardPage() {
               color="red"
               progress={(confirmadosMensual / totalMeses) * 100}
               sublabel={`${totalMeses} meses en el ciclo`}
+              onClick={() => scrollToPayments('MENSUAL')}
             />
           </div>
         </section>
@@ -792,7 +816,7 @@ export default function StudentDashboardPage() {
         )}
 
         {/* ── PAYMENTS LIST ────────────────────────────────────────── */}
-        <section className="space-y-4">
+        <section ref={paymentsRef} className="space-y-4 scroll-mt-20">
           {/* Tab header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
