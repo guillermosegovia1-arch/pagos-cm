@@ -2039,18 +2039,6 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                  Fecha de Vencimiento de Pago
-                </label>
-                <input
-                  type="date"
-                  value={fechaVencimiento}
-                  onChange={(e) => setFechaVencimiento(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-cyan-500 text-xs font-mono"
-                />
-              </div>
 
               <div className="space-y-1.5">
                 <label className="block font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1">
