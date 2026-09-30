@@ -499,8 +499,9 @@ export default function StudentDashboardPage() {
   // Ref para scroll a la sección de pagos
   const paymentsRef = React.useRef<HTMLElement>(null);
 
-  const scrollToPayments = (tab: 'ANUAL' | 'MENSUAL') => {
+  const scrollToPayments = (tab: 'ANUAL' | 'MENSUAL', filter?: string | null) => {
     setSelectedConceptTab(tab);
+    setStatusFilter(filter ?? null);
     setTimeout(() => {
       paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
@@ -516,6 +517,7 @@ export default function StudentDashboardPage() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showTutorialModal, setShowTutorialModal] = useState(false);
   const [selectedConceptTab, setSelectedConceptTab] = useState<'ANUAL' | 'MENSUAL'>('ANUAL');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [cicloEscolar, setCicloEscolar] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -944,7 +946,7 @@ export default function StudentDashboardPage() {
               color="blue"
               progress={totalAnual > 0 ? (enRevisionAnual / totalAnual) * 100 : 0}
               sublabel="El colegio está verificando"
-              onClick={() => scrollToPayments('ANUAL')}
+              onClick={() => scrollToPayments('ANUAL', 'En Revisión')}
             />
             <StatCard
               label="Pagos Anuales Confirmados"
@@ -953,7 +955,7 @@ export default function StudentDashboardPage() {
               color="green"
               progress={totalAnual > 0 ? (confirmadosAnual / totalAnual) * 100 : 0}
               sublabel="Validados por administración"
-              onClick={() => scrollToPayments('ANUAL')}
+              onClick={() => scrollToPayments('ANUAL', 'Confirmado')}
             />
             <StatCard
               label="Pagos Anuales Pendientes"
@@ -962,7 +964,7 @@ export default function StudentDashboardPage() {
               color="amber"
               progress={totalAnual > 0 ? (pendientesAnual / totalAnual) * 100 : 0}
               sublabel="Sin reportar aún"
-              onClick={() => scrollToPayments('ANUAL')}
+              onClick={() => scrollToPayments('ANUAL', 'Pendiente')}
             />
             <StatCard
               label="Colegiaturas del Ciclo"
@@ -971,7 +973,7 @@ export default function StudentDashboardPage() {
               color="red"
               progress={(confirmadosMensual / totalMeses) * 100}
               sublabel={`${totalMeses} meses en el ciclo`}
-              onClick={() => scrollToPayments('MENSUAL')}
+              onClick={() => scrollToPayments('MENSUAL', null)}
             />
           </div>
         </section>
@@ -988,9 +990,35 @@ export default function StudentDashboardPage() {
         <section ref={paymentsRef} className="space-y-4 scroll-mt-20">
           {/* Tab header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-cyan-400" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Estado de Conceptos</h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Estado de Conceptos</h2>
+              </div>
+
+              {/* Filtro activo badge */}
+              {statusFilter && (
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                    statusFilter === 'En Revisión'
+                      ? 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+                      : statusFilter === 'Confirmado'
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                      : statusFilter === 'Pendiente'
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                      : 'bg-red-500/15 border-red-500/30 text-red-300'
+                  }`}>
+                    Filtro: {statusFilter}
+                  </span>
+                  <button
+                    onClick={() => setStatusFilter(null)}
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800 transition-colors border border-slate-700/60"
+                  >
+                    <X className="w-3 h-3" />
+                    Ver todos
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 bg-slate-900/80 p-1 rounded-2xl border border-slate-800 w-fit">
@@ -998,7 +1026,7 @@ export default function StudentDashboardPage() {
                 <button
                   key={tab}
                   type="button"
-                  onClick={() => setSelectedConceptTab(tab)}
+                  onClick={() => { setSelectedConceptTab(tab); setStatusFilter(null); }}
                   className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer border ${
                     selectedConceptTab === tab
                       ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
@@ -1017,17 +1045,36 @@ export default function StudentDashboardPage() {
 
           {/* Cards */}
           <div className="space-y-3">
-            {pagos.filter((p) => p.tipo === selectedConceptTab).length === 0 ? (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-800 mx-auto flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-slate-500" />
-                </div>
-                <p className="text-slate-400 text-sm">No hay conceptos de {selectedConceptTab === 'ANUAL' ? 'Pago Anual' : 'Colegiatura Mensual'} registrados.</p>
-              </div>
-            ) : (
-              pagos
+            {(() => {
+              const filteredPagos = pagos
                 .filter((p) => p.tipo === selectedConceptTab)
-                .map((pago) => {
+                .filter((p) => !statusFilter || p.estado === statusFilter);
+
+              if (filteredPagos.length === 0) {
+                return (
+                  <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-800 mx-auto flex items-center justify-center">
+                      <FileText className="w-6 h-6 text-slate-500" />
+                    </div>
+                    <p className="text-slate-400 text-sm">
+                      {statusFilter
+                        ? `No hay pagos con estado "${statusFilter}" en esta categoría.`
+                        : `No hay conceptos de ${selectedConceptTab === 'ANUAL' ? 'Pago Anual' : 'Colegiatura Mensual'} registrados.`}
+                    </p>
+                    {statusFilter && (
+                      <button
+                        onClick={() => setStatusFilter(null)}
+                        className="mx-auto flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 px-3 py-1.5 rounded-xl border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Quitar filtro y ver todos
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              return filteredPagos.map((pago) => {
                   const isPending = pago.estado === 'Pendiente';
                   const isReview = pago.estado === 'En Revisión';
                   const isConfirmed = pago.estado === 'Confirmado';
@@ -1287,8 +1334,8 @@ export default function StudentDashboardPage() {
                       </div>
                     </div>
                   );
-                })
-            )}
+                });
+            })()}
           </div>
         </section>
       </main>
