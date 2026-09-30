@@ -268,7 +268,11 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, progress
 
 // ── Monthly Calendar ──────────────────────────────────────────────────────────
 
-const MonthlyCalendar: React.FC<{ pagos: Pago[]; nivel: string }> = ({ pagos, nivel }) => {
+const MonthlyCalendar: React.FC<{
+  pagos: Pago[];
+  nivel: string;
+  onMonthClick?: (mes: string) => void;
+}> = ({ pagos, nivel, onMonthClick }) => {
   const meses = getMesesCiclo(nivel);
   const totalMeses = meses.length;
 
@@ -335,22 +339,47 @@ const MonthlyCalendar: React.FC<{ pagos: Pago[]; nivel: string }> = ({ pagos, ni
           }
 
           return (
-            <div
+            <button
               key={mes}
-              className={`relative rounded-xl border px-2 py-2.5 text-center transition-all ${bg} ${isCurrent ? 'ring-1 ring-cyan-400/50' : ''}`}
+              type="button"
+              onClick={() => onMonthClick?.(mes)}
+              title={
+                isCurrent
+                  ? `Mes actual (${mes}) · Clic para ir a Colegiaturas`
+                  : `Colegiatura de ${mes} · Clic para ver`
+              }
+              className={`relative rounded-xl border px-2 py-2.5 text-center transition-all cursor-pointer group ${bg} ${
+                isCurrent
+                  ? 'ring-2 ring-cyan-400 bg-cyan-500/15 text-cyan-200 shadow-md shadow-cyan-500/20 hover:bg-cyan-500/25 hover:scale-105 active:scale-95'
+                  : 'hover:bg-slate-800 hover:text-slate-300 hover:scale-105 active:scale-95'
+              }`}
             >
               {isCurrent && (
-                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 ring-2 ring-slate-900" />
+                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 ring-2 ring-slate-900 animate-pulse" />
               )}
-              <div className={`w-1.5 h-1.5 rounded-full ${dot} mx-auto mb-1`} />
-              <p className="text-[10px] font-bold leading-none">{mes.slice(0, 3)}</p>
-              {label && <p className="text-[9px] mt-0.5 opacity-70">{label}</p>}
-            </div>
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isCurrent && state === 'sin-pago' ? 'bg-cyan-400' : dot
+                } mx-auto mb-1`}
+              />
+              <p
+                className={`text-[10px] font-bold leading-none ${
+                  isCurrent ? 'text-cyan-100 group-hover:text-white' : ''
+                }`}
+              >
+                {mes.slice(0, 3)}
+              </p>
+              {label ? (
+                <p className="text-[9px] mt-0.5 opacity-80">{label}</p>
+              ) : isCurrent ? (
+                <p className="text-[8px] mt-0.5 text-cyan-400 font-extrabold tracking-tight">Actual</p>
+              ) : null}
+            </button>
           );
         })}
       </div>
 
-      <div className="flex flex-wrap gap-3 pt-1 border-t border-slate-800">
+      <div className="flex flex-wrap gap-3 pt-1 border-t border-slate-800 items-center">
         {[
           { color: 'bg-emerald-400', label: 'Confirmado' },
           { color: 'bg-blue-400', label: 'En Revisión' },
@@ -362,10 +391,15 @@ const MonthlyCalendar: React.FC<{ pagos: Pago[]; nivel: string }> = ({ pagos, ni
             <span>{item.label}</span>
           </div>
         ))}
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 ml-auto">
-          <div className="w-2.5 h-2.5 rounded-full ring-1 ring-cyan-400" />
-          <span>Mes actual</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => onMonthClick?.(currentMonthCap)}
+          title="Ver colegiatura del mes actual"
+          className="flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 ml-auto cursor-pointer transition-colors"
+        >
+          <div className="w-2.5 h-2.5 rounded-full ring-1 ring-cyan-400 bg-cyan-400/20" />
+          <span>Mes actual (clic para ir)</span>
+        </button>
       </div>
     </div>
   );
@@ -554,6 +588,40 @@ export default function StudentDashboardPage() {
     setTimeout(() => {
       paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
+  };
+
+  const scrollToMonthly = (mes?: string) => {
+    setSelectedConceptTab('MENSUAL');
+    setStatusFilter(null);
+    setConceptFilter(null);
+
+    const matchedPago = mes
+      ? pagos.find(
+          (p) =>
+            p.tipo === 'MENSUAL' &&
+            p.mesColegiatura?.toLowerCase().trim().startsWith(mes.toLowerCase().trim().slice(0, 3))
+        )
+      : pagos.find((p) => p.tipo === 'MENSUAL');
+
+    if (matchedPago) {
+      setHighlightedPagoId(matchedPago.id);
+      setTimeout(() => {
+        const el = document.getElementById(`pago-card-${matchedPago.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+
+      setTimeout(() => {
+        setHighlightedPagoId((prev) => (prev === matchedPago.id ? null : prev));
+      }, 4000);
+    } else {
+      setTimeout(() => {
+        paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
   };
 
   const [highlightedPagoId, setHighlightedPagoId] = useState<string | null>(null);
@@ -1075,7 +1143,7 @@ export default function StudentDashboardPage() {
         {/* ── MONTHLY CALENDAR + DUE DATES ─────────────────────────── */}
         {user && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <MonthlyCalendar pagos={pagos} nivel={user.nivelEscolar} />
+            <MonthlyCalendar pagos={pagos} nivel={user.nivelEscolar} onMonthClick={scrollToMonthly} />
             <DueDatesPanel nivel={user.nivelEscolar} onConceptClick={scrollToConcepto} />
           </div>
         )}
