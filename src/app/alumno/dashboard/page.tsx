@@ -1203,12 +1203,16 @@ export default function StudentDashboardPage() {
                   const vencConcepto = getVencimientoConcepto(pago.concepto, user?.nivelEscolar || '');
 
                   const borderClass = isConfirmed
-                    ? 'border-emerald-500/30'
+                    ? 'border-emerald-500/50'
                     : isReview
                     ? 'border-blue-500/30'
                     : isClarification
                     ? 'border-red-500/40'
                     : 'border-amber-500/25';
+
+                  const cardBgClass = isConfirmed
+                    ? 'bg-gradient-to-br from-emerald-950/70 via-emerald-900/40 to-[#052317] border-emerald-500/50 shadow-md shadow-emerald-950/40'
+                    : 'bg-slate-900/80';
 
                   const statusDot = isConfirmed
                     ? 'bg-emerald-400'
@@ -1224,7 +1228,7 @@ export default function StudentDashboardPage() {
                     <div
                       id={`pago-card-${pago.id}`}
                       key={pago.id}
-                      className={`bg-slate-900/80 border ${
+                      className={`${cardBgClass} border ${
                         isHighlighted
                           ? 'border-cyan-400 ring-4 ring-cyan-400/40 shadow-2xl shadow-cyan-500/30 scale-[1.01]'
                           : borderClass
@@ -1241,9 +1245,19 @@ export default function StudentDashboardPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot}`} />
                             <h4 className="text-sm font-bold text-white truncate">{displayName}</h4>
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                              isConfirmed
+                                ? 'bg-emerald-900/50 text-emerald-300 border-emerald-600/40'
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
                               {pago.tipo}
                             </span>
+                            {isConfirmed && (
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 flex items-center gap-1 shadow-sm">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                                CONFIRMADO
+                              </span>
+                            )}
                             {isHighlighted && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 animate-pulse flex items-center gap-1">
                                 <Bell className="w-2.5 h-2.5" />
@@ -1255,12 +1269,20 @@ export default function StudentDashboardPage() {
                           {/* Date from DB */}
                           {vencimientoInfo && (
                             <div className="flex items-center gap-1.5">
-                              <span className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${vencimientoInfo.isExpired && !isConfirmed ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-slate-800/60 border-slate-700/60 text-slate-300'}`}>
+                              <span className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                                isConfirmed
+                                  ? 'bg-emerald-900/50 border-emerald-500/40 text-emerald-200'
+                                  : vencimientoInfo.isExpired
+                                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                                  : 'bg-slate-800/60 border-slate-700/60 text-slate-300'
+                              }`}>
                                 <Calendar className="w-3 h-3 text-cyan-400" />
                                 Vence: {vencimientoInfo.formatted}
-                                {vencimientoInfo.isExpired && !isConfirmed && (
+                                {isConfirmed ? (
+                                  <span className="text-[9px] font-black bg-emerald-500/30 text-emerald-200 px-1.5 py-0.5 rounded uppercase ml-1">Cubierto ✓</span>
+                                ) : vencimientoInfo.isExpired ? (
                                   <span className="text-[9px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded uppercase ml-1">Vencido</span>
-                                )}
+                                ) : null}
                               </span>
                             </div>
                           )}
@@ -1268,9 +1290,16 @@ export default function StudentDashboardPage() {
                           {/* Static due date from concept logic */}
                           {!vencimientoInfo && vencConcepto && (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 bg-slate-800/60 border-slate-700/60 text-slate-300">
+                              <span className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                                isConfirmed
+                                  ? 'bg-emerald-900/50 border-emerald-500/40 text-emerald-200'
+                                  : 'bg-slate-800/60 border-slate-700/60 text-slate-300'
+                              }`}>
                                 <Calendar className="w-3 h-3 text-cyan-400" />
                                 Vence: {vencConcepto.label}
+                                {isConfirmed && (
+                                  <span className="text-[9px] font-black bg-emerald-500/30 text-emerald-200 px-1.5 py-0.5 rounded uppercase ml-1">Cubierto ✓</span>
+                                )}
                               </span>
                             </div>
                           )}
@@ -1307,7 +1336,11 @@ export default function StudentDashboardPage() {
                           href={platformInfo.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`flex-shrink-0 px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${platformInfo.bg} ${platformInfo.border} ${platformInfo.text} ${platformInfo.hover}`}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                            isConfirmed
+                              ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                              : `${platformInfo.bg} ${platformInfo.border} ${platformInfo.text} ${platformInfo.hover}`
+                          }`}
                           title={`Ir a ${platformInfo.name}`}
                         >
                           <span className="hidden sm:inline">Ir a {platformInfo.name}</span>
@@ -1400,12 +1433,21 @@ export default function StudentDashboardPage() {
                       )}
 
                       {/* Action bar */}
-                      <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-slate-800/80 bg-slate-950/30">
+                      <div className={`flex items-center justify-between gap-3 px-5 py-3 border-t ${
+                        isConfirmed
+                          ? 'border-emerald-800/60 bg-emerald-950/60'
+                          : 'border-slate-800/80 bg-slate-950/30'
+                      }`}>
                         <div>
                           {isConfirmed && (
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                              <CheckCircle2 className="w-4 h-4" />
-                              Pago Confirmado
+                            <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              </div>
+                              <div>
+                                <span>Pago Confirmado</span>
+                                <span className="hidden sm:inline text-emerald-400/70 text-[11px] font-normal ml-1.5">· Validado por la administración</span>
+                              </div>
                             </div>
                           )}
                           {isReview && (
@@ -1429,6 +1471,12 @@ export default function StudentDashboardPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {isConfirmed && (
+                            <span className="text-[11px] font-semibold text-emerald-300/80 bg-emerald-500/15 px-3 py-1.5 rounded-xl border border-emerald-500/30 flex items-center gap-1.5 cursor-not-allowed select-none">
+                              <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                              Inhabilitado
+                            </span>
+                          )}
                           {isClarification && (
                             <button
                               onClick={() => openClarifyModal(pago)}
