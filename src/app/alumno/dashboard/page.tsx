@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   CheckCircle2,
   Clock,
@@ -11,17 +12,18 @@ import {
   LogOut,
   Send,
   Loader2,
-  ShieldCheck,
   User,
   GraduationCap,
-  BookOpen,
-  Laptop,
-  Layers,
-  FileCheck,
   X,
   PlayCircle,
   FileText,
-  Calendar
+  Calendar,
+  TrendingUp,
+  BarChart3,
+  AlertCircle,
+  ChevronRight,
+  BookOpen,
+  Info,
 } from 'lucide-react';
 
 interface Pago {
@@ -47,29 +49,59 @@ interface UserProfile {
   grupo?: string | null;
 }
 
+// ── helpers ──────────────────────────────────────────────────────────────────
+
 const getCurrentMonthName = () => {
   const now = new Date();
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
   ];
   return `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
 };
 
-const getPlatformLinkForConcept = (concepto: string) => {
-  const norm = concepto.toLowerCase();
-  if (norm.includes('knotion')) {
-    return { name: 'Knotion', url: 'https://dep.knotion.com/login', colorClass: 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' };
+const isPreparatoria = (nivel: string) =>
+  nivel?.toLowerCase().includes('preparatoria') ||
+  nivel?.toLowerCase().includes('prepa') ||
+  nivel?.toLowerCase().includes('bachiller');
+
+/** Meses del ciclo escolar según nivel */
+const getMesesCiclo = (nivel: string) => {
+  if (isPreparatoria(nivel)) {
+    return ['Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio'];
   }
-  if (norm.includes('lypro')) {
-    return { name: 'Lypro', url: 'https://lyprocolegiomexicano.appssolution.net/', colorClass: 'border-purple-500/40 text-purple-300 hover:bg-purple-500/10' };
+  return ['Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio'];
+};
+
+/** Fecha de vencimiento de cada concepto según nivel */
+const getVencimientoConcepto = (concepto: string, nivel: string): { label: string; nota?: string } | null => {
+  const n = concepto.toLowerCase();
+  const esPrepa = isPreparatoria(nivel);
+
+  if (n.includes('knotion')) {
+    return {
+      label: '31 de Agosto',
+      nota: 'Precio especial hasta el 31 de Agosto. A partir del 1° de Septiembre el costo incrementa.',
+    };
   }
-  return { name: 'SchoolCloud', url: 'https://erp.schoolcloud.net/campus/cm', colorClass: 'border-blue-500/40 text-blue-300 hover:bg-blue-500/10' };
+  if (n.includes('lypro')) {
+    return { label: '30 de Septiembre' };
+  }
+  if (n.includes('inscripci') || n.includes('reinscripci')) {
+    if (esPrepa) {
+      return { label: '10 de Julio / 10 de Enero', nota: 'Preparatoria tiene dos fechas de vencimiento: 10 de Julio y 10 de Enero.' };
+    }
+    return { label: '10 de Agosto' };
+  }
+  if (n.includes('tecnolog') || n.includes('materia') || n.includes('escolar')) {
+    return { label: '10 de Agosto' };
+  }
+  return null;
 };
 
 const formatVencimiento = (fechaStr?: string | null) => {
   if (!fechaStr) return null;
-  const d = new Date(fechaStr);
+  const d = new Date(fechaStr + 'T12:00:00');
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
@@ -82,6 +114,338 @@ const formatVencimiento = (fechaStr?: string | null) => {
   return { formatted, isExpired };
 };
 
+const getPlatformInfo = (concepto: string) => {
+  const norm = concepto.toLowerCase();
+  if (norm.includes('knotion')) {
+    return {
+      name: 'Knotion',
+      url: 'https://dep.knotion.com/login',
+      logo: '/logos/knotion.png',
+      bg: 'bg-teal-500/10',
+      border: 'border-teal-500/30',
+      text: 'text-teal-300',
+      hover: 'hover:border-teal-400/60 hover:bg-teal-500/15',
+    };
+  }
+  if (norm.includes('lypro')) {
+    return {
+      name: 'Lypro',
+      url: 'https://lyprocolegiomexicano.appssolution.net/',
+      logo: '/logos/lypro.png',
+      bg: 'bg-red-500/10',
+      border: 'border-red-500/30',
+      text: 'text-red-300',
+      hover: 'hover:border-red-400/60 hover:bg-red-500/15',
+    };
+  }
+  return {
+    name: 'SchoolCloud',
+    url: 'https://erp.schoolcloud.net/campus/cm',
+    logo: '/logos/schoolcloud.png',
+    bg: 'bg-sky-500/10',
+    border: 'border-sky-500/30',
+    text: 'text-sky-300',
+    hover: 'hover:border-sky-400/60 hover:bg-sky-500/15',
+  };
+};
+
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+
+interface StatCardProps {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  color: 'blue' | 'amber' | 'green' | 'red';
+  progress: number; // 0-100
+  sublabel?: string;
+}
+
+const colorMap = {
+  blue: {
+    ring: 'ring-blue-500/30',
+    icon: 'bg-blue-500/15 text-blue-400',
+    bar: 'bg-blue-500',
+    track: 'bg-blue-500/15',
+    value: 'text-blue-300',
+    badge: 'bg-blue-500/20 border-blue-500/30 text-blue-400',
+  },
+  amber: {
+    ring: 'ring-amber-500/30',
+    icon: 'bg-amber-500/15 text-amber-400',
+    bar: 'bg-amber-500',
+    track: 'bg-amber-500/15',
+    value: 'text-amber-300',
+    badge: 'bg-amber-500/20 border-amber-500/30 text-amber-400',
+  },
+  green: {
+    ring: 'ring-emerald-500/30',
+    icon: 'bg-emerald-500/15 text-emerald-400',
+    bar: 'bg-emerald-500',
+    track: 'bg-emerald-500/15',
+    value: 'text-emerald-300',
+    badge: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400',
+  },
+  red: {
+    ring: 'ring-red-500/30',
+    icon: 'bg-red-500/15 text-red-400',
+    bar: 'bg-red-500',
+    track: 'bg-red-500/15',
+    value: 'text-red-300',
+    badge: 'bg-red-500/20 border-red-500/30 text-red-400',
+  },
+};
+
+const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color, progress, sublabel }) => {
+  const c = colorMap[color];
+  return (
+    <div
+      className={`relative bg-slate-900/80 border border-slate-800 rounded-2xl p-5 ring-1 ${c.ring} overflow-hidden group hover:scale-[1.02] transition-transform duration-200 cursor-default`}
+    >
+      {/* glow */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+        style={{ background: `radial-gradient(circle at 60% 40%, ${color === 'blue' ? 'rgba(59,130,246,0.07)' : color === 'amber' ? 'rgba(245,158,11,0.07)' : color === 'green' ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)'} 0%, transparent 70%)` }}
+      />
+
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.icon} text-sm`}>
+          {icon}
+        </div>
+        <span className={`text-2xl font-black tracking-tight ${c.value}`}>{value}</span>
+      </div>
+
+      <p className="text-xs font-semibold text-slate-300 leading-tight">{label}</p>
+      {sublabel && <p className="text-[10px] text-slate-500 mt-0.5">{sublabel}</p>}
+
+      {/* progress bar */}
+      <div className={`mt-3 h-1.5 rounded-full ${c.track}`}>
+        <div
+          className={`h-full rounded-full ${c.bar} transition-all duration-700`}
+          style={{ width: `${Math.min(100, progress)}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// ── Monthly Calendar ──────────────────────────────────────────────────────────
+
+const MonthlyCalendar: React.FC<{ pagos: Pago[]; nivel: string }> = ({ pagos, nivel }) => {
+  const meses = getMesesCiclo(nivel);
+  const totalMeses = meses.length;
+
+  const pagosMensuales = pagos.filter((p) => p.tipo === 'MENSUAL');
+
+  // Map month name -> payment state
+  const monthState: Record<string, Pago['estado'] | 'sin-pago'> = {};
+  meses.forEach((m) => {
+    const found = pagosMensuales.find((p) => {
+      const mes = (p.mesColegiatura || '').toLowerCase();
+      return mes.includes(m.toLowerCase());
+    });
+    monthState[m] = found ? found.estado : 'sin-pago';
+  });
+
+  const confirmedCount = Object.values(monthState).filter((s) => s === 'Confirmado').length;
+  const reviewCount = Object.values(monthState).filter((s) => s === 'En Revisión').length;
+  const pendingCount = totalMeses - confirmedCount - reviewCount;
+
+  const currentMonth = new Date().toLocaleString('es-MX', { month: 'long' });
+  const currentMonthCap = currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1);
+
+  return (
+    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+            <Calendar className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-white">Colegiaturas del Ciclo Escolar</h3>
+            <p className="text-[10px] text-slate-500">
+              {totalMeses} meses · {isPreparatoria(nivel) ? 'Agosto – Julio' : 'Agosto – Junio'}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-xs text-emerald-400 font-bold">{confirmedCount}/{totalMeses}</span>
+          <p className="text-[10px] text-slate-500">confirmados</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+        {meses.map((mes) => {
+          const state = monthState[mes];
+          const isCurrent = mes === currentMonthCap || currentMonthCap.startsWith(mes.slice(0, 3));
+
+          let bg = 'bg-slate-800/60 border-slate-700/60 text-slate-500';
+          let dot = 'bg-slate-600';
+          let label = '';
+
+          if (state === 'Confirmado') {
+            bg = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300';
+            dot = 'bg-emerald-400';
+            label = '✓';
+          } else if (state === 'En Revisión') {
+            bg = 'bg-blue-500/10 border-blue-500/30 text-blue-300';
+            dot = 'bg-blue-400';
+            label = '…';
+          } else if (state === 'Requiere Aclaración') {
+            bg = 'bg-red-500/10 border-red-500/30 text-red-300';
+            dot = 'bg-red-400';
+            label = '!';
+          }
+
+          return (
+            <div
+              key={mes}
+              className={`relative rounded-xl border px-2 py-2.5 text-center transition-all ${bg} ${isCurrent ? 'ring-1 ring-cyan-400/50' : ''}`}
+            >
+              {isCurrent && (
+                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 ring-2 ring-slate-900" />
+              )}
+              <div className={`w-1.5 h-1.5 rounded-full ${dot} mx-auto mb-1`} />
+              <p className="text-[10px] font-bold leading-none">{mes.slice(0, 3)}</p>
+              {label && <p className="text-[9px] mt-0.5 opacity-70">{label}</p>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-3 pt-1 border-t border-slate-800">
+        {[
+          { color: 'bg-emerald-400', label: 'Confirmado' },
+          { color: 'bg-blue-400', label: 'En Revisión' },
+          { color: 'bg-red-400', label: 'Aclaración' },
+          { color: 'bg-slate-600', label: 'Pendiente' },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-1.5 text-[10px] text-slate-400">
+            <div className={`w-2 h-2 rounded-full ${item.color}`} />
+            <span>{item.label}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 ml-auto">
+          <div className="w-2.5 h-2.5 rounded-full ring-1 ring-cyan-400" />
+          <span>Mes actual</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Due Dates Info Panel ──────────────────────────────────────────────────────
+
+const DueDatesPanel: React.FC<{ nivel: string }> = ({ nivel }) => {
+  const esPrepa = isPreparatoria(nivel);
+
+  const items = [
+    {
+      concepto: 'Inscripción / Reinscripción',
+      vencimiento: esPrepa ? '10 de Julio · 10 de Enero' : '10 de Agosto',
+      nota: esPrepa ? 'Dos periodos para Preparatoria' : undefined,
+      color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      icon: '📋',
+    },
+    {
+      concepto: 'Cuota de Tecnología',
+      vencimiento: '10 de Agosto',
+      color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      icon: '💻',
+    },
+    {
+      concepto: 'Cuota de Materia',
+      vencimiento: '10 de Agosto',
+      color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      icon: '📚',
+    },
+    {
+      concepto: 'Cuota Escolar Anual',
+      vencimiento: '10 de Agosto',
+      color: 'border-sky-500/30 bg-sky-500/5 text-sky-300',
+      icon: '🏫',
+    },
+    {
+      concepto: 'Knotion',
+      vencimiento: '31 de Agosto',
+      nota: 'Precio especial hasta el 31 Ago. Incrementa a partir del 1° Sep.',
+      color: 'border-teal-500/30 bg-teal-500/5 text-teal-300',
+      icon: '🖥️',
+    },
+    {
+      concepto: 'Lypro',
+      vencimiento: '30 de Septiembre',
+      color: 'border-rose-500/30 bg-rose-500/5 text-rose-300',
+      icon: '📖',
+    },
+  ];
+
+  return (
+    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center">
+          <AlertCircle className="w-4 h-4 text-amber-400" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white">Fechas de Vencimiento de Conceptos</h3>
+          <p className="text-[10px] text-slate-500">Realice sus pagos antes de las fechas indicadas</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={item.concepto}
+            className={`flex items-start gap-3 p-3 rounded-xl border ${item.color} transition-all`}
+          >
+            <span className="text-base mt-0.5 flex-shrink-0">{item.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                <span className="text-xs font-bold text-slate-200">{item.concepto}</span>
+                <span className="text-xs font-black whitespace-nowrap">{item.vencimiento}</span>
+              </div>
+              {item.nota && (
+                <p className="text-[10px] text-slate-400 mt-0.5 flex items-start gap-1">
+                  <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                  {item.nota}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ── Platform Logo Card ─────────────────────────────────────────────────────────
+
+const PlatformCard: React.FC<{
+  name: string;
+  url: string;
+  logo: string;
+  desc: string;
+  bg: string;
+  border: string;
+  hover: string;
+}> = ({ name, url, logo, desc, bg, border, hover }) => (
+  <a
+    href={url}
+    target="_blank"
+    rel="noopener noreferrer"
+    className={`group flex flex-col items-center gap-3 p-4 rounded-2xl border ${bg} ${border} ${hover} transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer`}
+  >
+    <div className="relative w-14 h-14 rounded-2xl overflow-hidden bg-white/90 p-1 shadow-sm group-hover:scale-105 transition-transform duration-200">
+      <Image src={logo} alt={name} fill className="object-contain p-0.5" sizes="56px" />
+    </div>
+    <div className="text-center">
+      <p className="text-xs font-bold text-slate-100 group-hover:text-white">{name}</p>
+      <p className="text-[10px] text-slate-500">{desc}</p>
+    </div>
+    <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-slate-300 transition-colors" />
+  </a>
+);
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -89,7 +453,6 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Modal states
   const [selectedPago, setSelectedPago] = useState<Pago | null>(null);
   const [confirmNumber, setConfirmNumber] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
@@ -98,25 +461,17 @@ export default function StudentDashboardPage() {
   const [clarifyResponse, setClarifyResponse] = useState('');
   const [showClarifyModal, setShowClarifyModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-
   const [showTutorialModal, setShowTutorialModal] = useState(false);
   const [selectedConceptTab, setSelectedConceptTab] = useState<'ANUAL' | 'MENSUAL'>('ANUAL');
   const [cicloEscolar, setCicloEscolar] = useState('');
-
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const fetchDashboard = async () => {
     try {
       const res = await fetch('/api/student/dashboard');
-      if (res.status === 401 || res.status === 403) {
-        router.push('/login');
-        return;
-      }
+      if (res.status === 401 || res.status === 403) { router.push('/login'); return; }
       const data = await res.json();
-      if (data.user) {
-        setUser(data.user);
-        setPagos(data.pagos || []);
-      }
+      if (data.user) { setUser(data.user); setPagos(data.pagos || []); }
     } catch (err) {
       console.error('Error fetching dashboard:', err);
     } finally {
@@ -127,11 +482,10 @@ export default function StudentDashboardPage() {
   useEffect(() => {
     fetchDashboard();
     fetch('/api/settings/ciclo-escolar')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.cicloEscolar) setCicloEscolar(data.cicloEscolar);
-      })
-      .catch((err) => console.error('Error fetching ciclo escolar:', err));
+      .then((r) => r.json())
+      .then((d) => { if (d.cicloEscolar) setCicloEscolar(d.cicloEscolar); })
+      .catch((e) => console.error(e));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleLogout = async () => {
@@ -148,38 +502,27 @@ export default function StudentDashboardPage() {
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPago || !confirmNumber.trim()) return;
-
     setSubmitting(true);
     setFeedbackMsg(null);
-
     try {
-      const currentMonthName = getCurrentMonthName();
       const res = await fetch('/api/student/report-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pagoId: selectedPago.id,
           numeroConfirmacion: confirmNumber.trim(),
-          mesColegiatura: selectedPago.tipo === 'MENSUAL' ? (selectedPago.mesColegiatura || currentMonthName) : undefined,
+          mesColegiatura: selectedPago.tipo === 'MENSUAL' ? (selectedPago.mesColegiatura || getCurrentMonthName()) : undefined,
         }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Error al reportar pago');
-      }
-
-      setFeedbackMsg({
-        type: 'success',
-        text: 'En Revisión: El colegio está verificando el reporte recibido. (Espere de 1 a 3 días)',
-      });
-
+      if (!res.ok) throw new Error(data.error || 'Error al reportar pago');
+      setFeedbackMsg({ type: 'success', text: 'En Revisión: El colegio está verificando el reporte recibido. (Espere de 1 a 3 días)' });
       setShowReportModal(false);
       setConfirmNumber('');
       fetchDashboard();
-    } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      setFeedbackMsg({ type: 'error', text: message });
     } finally {
       setSubmitting(false);
     }
@@ -194,432 +537,475 @@ export default function StudentDashboardPage() {
   const handleClarifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clarifyPago || !clarifyResponse.trim()) return;
-
     setSubmitting(true);
     setFeedbackMsg(null);
-
     try {
       const res = await fetch('/api/student/respond-clarification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pagoId: clarifyPago.id,
-          respuestaAlumno: clarifyResponse.trim(),
-        }),
+        body: JSON.stringify({ pagoId: clarifyPago.id, respuestaAlumno: clarifyResponse.trim() }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Error al enviar la respuesta');
-      }
-
-      setFeedbackMsg({
-        type: 'success',
-        text: 'Respuesta enviada correctamente. El colegio revisará los datos.',
-      });
-
+      if (!res.ok) throw new Error(data.error || 'Error al enviar la respuesta');
+      setFeedbackMsg({ type: 'success', text: 'Respuesta enviada correctamente. El colegio revisará los datos.' });
       setShowClarifyModal(false);
       setClarifyResponse('');
       fetchDashboard();
-    } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      setFeedbackMsg({ type: 'error', text: message });
     } finally {
       setSubmitting(false);
     }
   };
 
+  // ── Derived stats ─────────────────────────────────────────────────────────
+
+  const pagosAnuales = pagos.filter((p) => p.tipo === 'ANUAL');
+  const totalAnual = pagosAnuales.length;
+  const confirmadosAnual = pagosAnuales.filter((p) => p.estado === 'Confirmado').length;
+  const enRevisionAnual = pagosAnuales.filter((p) => p.estado === 'En Revisión').length;
+  const pendientesAnual = pagosAnuales.filter((p) => p.estado === 'Pendiente').length;
+
+  const pagosMensuales = pagos.filter((p) => p.tipo === 'MENSUAL');
+  const totalMeses = user ? getMesesCiclo(user.nivelEscolar).length : 11;
+  const confirmadosMensual = pagosMensuales.filter((p) => p.estado === 'Confirmado').length;
+
+  // ── Loading ───────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="w-10 h-10 animate-spin text-cyan-400" />
-        <p className="text-sm font-medium">Cargando portal de pagos...</p>
+      <div className="min-h-screen bg-[#080c14] flex flex-col items-center justify-center text-slate-400 gap-4">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-indigo-600/20 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-slate-300">Cargando panel de pagos...</p>
+          <p className="text-xs text-slate-500 mt-1">Portal del Alumno · Colegio Mexicano</p>
+        </div>
       </div>
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Navigation Topbar */}
-      <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#080c14] text-slate-100 flex flex-col" style={{ fontFamily: "'Inter', sans-serif" }}>
+
+      {/* ── TOP NAV ────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-30 bg-[#080c14]/90 backdrop-blur-xl border-b border-slate-800/60">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+
+          {/* Brand */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
-              <ShieldCheck className="w-6 h-6" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
+              <BookOpen className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+            <div className="hidden sm:block">
+              <h1 className="text-sm font-black text-white tracking-tight">
                 Pagos<span className="text-cyan-400">CM</span>
               </h1>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Portal de registro de pagos de Plataformas del Colegio Mexicano
-              </p>
+              <p className="text-[10px] text-slate-500 leading-none">Portal de Plataformas · Colegio Mexicano</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Right actions */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setShowTutorialModal(true)}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 transition-all shadow-sm"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-cyan-300 border border-cyan-500/20 hover:border-cyan-500/40 transition-all"
             >
-              <HelpCircle className="w-4 h-4 text-cyan-400" />
-              <span>Tutorial de Pago</span>
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">¿Cómo pagar?</span>
             </button>
 
             <button
               onClick={() => setShowLogoutModal(true)}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition-all cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Cerrar Sesión</span>
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Salir</span>
             </button>
           </div>
         </div>
       </header>
 
+      {/* ── MAIN ───────────────────────────────────────────────────────── */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* Feedback Alert */}
+
+        {/* Feedback */}
         {feedbackMsg && (
-          <div
-            className={`p-4 rounded-xl border flex items-center justify-between text-sm animate-fade-in ${
-              feedbackMsg.type === 'success'
-                ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
-                : 'bg-red-500/10 border-red-500/30 text-red-300'
-            }`}
-          >
+          <div className={`p-4 rounded-2xl border flex items-center justify-between text-sm ${feedbackMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
             <span>{feedbackMsg.text}</span>
-            <button
-              onClick={() => setFeedbackMsg(null)}
-              className="text-slate-400 hover:text-white p-1"
-            >
+            <button onClick={() => setFeedbackMsg(null)} className="ml-4 text-slate-400 hover:text-white flex-shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {/* Student Profile Summary Card */}
-        <section className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+        {/* ── HERO PROFILE ─────────────────────────────────────────── */}
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-[#0f1729] to-[#080c14] border border-slate-800 p-6 sm:p-8 shadow-2xl">
+          {/* Background glow */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-            <div className="space-y-1">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-start gap-6 justify-between">
+            {/* Left: user info */}
+            <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold">
                   <GraduationCap className="w-3.5 h-3.5" />
-                  <span>{user?.nivelEscolar}</span>
-                  {user?.grado && user?.grupo && (
-                    <span className="text-cyan-300">• {user.grado}º "{user.grupo}"</span>
-                  )}
-                </div>
+                  {user?.nivelEscolar}
+                  {user?.grado && user?.grupo && <span className="text-cyan-300">· {user.grado}° &quot;{user.grupo}&quot;</span>}
+                </span>
 
                 {cicloEscolar && (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
-                    <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Ciclo Escolar {cicloEscolar}</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
+                    <Calendar className="w-3 h-3" />
+                    Ciclo {cicloEscolar}
+                  </span>
                 )}
+
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Alumno Activo
+                </span>
               </div>
-              <h2 className="text-2xl font-extrabold text-white tracking-tight">{user?.nombre}</h2>
-              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-slate-500" />
-                <span>Usuario: <strong className="text-slate-200 font-mono">{user?.usuario}</strong></span>
-              </p>
+
+              <div>
+                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight">{user?.nombre}</h2>
+                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+                  <User className="w-3 h-3 text-slate-500" />
+                  Usuario: <strong className="text-slate-200 font-mono ml-0.5">{user?.usuario}</strong>
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center min-w-[120px]">
-                <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">Estatus General</div>
-                <div className="text-sm font-extrabold text-emerald-400 mt-0.5 flex items-center justify-center gap-1">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Alumno Activo</span>
-                </div>
+            {/* Right: platform logos */}
+            <div className="flex-shrink-0">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2 text-center sm:text-right">Acceso a Plataformas</p>
+              <div className="flex items-center gap-2">
+                <PlatformCard
+                  name="SchoolCloud"
+                  url="https://erp.schoolcloud.net/campus/cm"
+                  logo="/logos/schoolcloud.png"
+                  desc="Control Escolar"
+                  bg="bg-slate-800/50"
+                  border="border-slate-700/60"
+                  hover="hover:border-sky-400/50 hover:bg-sky-500/10"
+                />
+                <PlatformCard
+                  name="Knotion"
+                  url="https://dep.knotion.com/login"
+                  logo="/logos/knotion.png"
+                  desc="Aprendizaje"
+                  bg="bg-slate-800/50"
+                  border="border-slate-700/60"
+                  hover="hover:border-teal-400/50 hover:bg-teal-500/10"
+                />
+                <PlatformCard
+                  name="Lypro"
+                  url="https://lyprocolegiomexicano.appssolution.net/"
+                  logo="/logos/lypro.png"
+                  desc="Material Didáctico"
+                  bg="bg-slate-800/50"
+                  border="border-slate-700/60"
+                  hover="hover:border-red-400/50 hover:bg-red-500/10"
+                />
               </div>
             </div>
           </div>
         </section>
 
-        {/* Platform Direct Access Links (Botones de Plataformas) */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" />
-              <span>Plataformas del Colegio Mexicano</span>
-            </h3>
-            <span className="text-xs text-slate-400">Acceso directo para padres y alumnos</span>
+        {/* ── DASHBOARD STATS ──────────────────────────────────────── */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Resumen de Pagos</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* SchoolCloud */}
-            <a
-              href="https://erp.schoolcloud.net/campus/cm"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group bg-slate-900 border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/10 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-bold text-slate-100 group-hover:text-cyan-400 transition-colors">SchoolCloud</div>
-                  <div className="text-xs text-slate-400">Control Escolar y Pagos</div>
-                </div>
-              </div>
-              <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
-            </a>
-
-            {/* Knotion */}
-            <a
-              href="https://dep.knotion.com/login"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group bg-slate-900 border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/10 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                  <Laptop className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-bold text-slate-100 group-hover:text-cyan-400 transition-colors">Knotion</div>
-                  <div className="text-xs text-slate-400">Ecosistema de Aprendizaje</div>
-                </div>
-              </div>
-              <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
-            </a>
-
-            {/* Lypro */}
-            <a
-              href="https://lyprocolegiomexicano.appssolution.net/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group bg-slate-900 border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/10 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
-                  <FileCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-bold text-slate-100 group-hover:text-cyan-400 transition-colors">Lypro</div>
-                  <div className="text-xs text-slate-400">Plataforma Educativa</div>
-                </div>
-              </div>
-              <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
-            </a>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <StatCard
+              label="Pagos Anuales en Revisión"
+              value={`${enRevisionAnual}/${totalAnual}`}
+              icon={<Clock className="w-5 h-5" />}
+              color="blue"
+              progress={totalAnual > 0 ? (enRevisionAnual / totalAnual) * 100 : 0}
+              sublabel="El colegio está verificando"
+            />
+            <StatCard
+              label="Pagos Anuales Confirmados"
+              value={`${confirmadosAnual}/${totalAnual}`}
+              icon={<CheckCircle2 className="w-5 h-5" />}
+              color="green"
+              progress={totalAnual > 0 ? (confirmadosAnual / totalAnual) * 100 : 0}
+              sublabel="Validados por administración"
+            />
+            <StatCard
+              label="Pagos Anuales Pendientes"
+              value={`${pendientesAnual}/${totalAnual}`}
+              icon={<AlertTriangle className="w-5 h-5" />}
+              color="amber"
+              progress={totalAnual > 0 ? (pendientesAnual / totalAnual) * 100 : 0}
+              sublabel="Sin reportar aún"
+            />
+            <StatCard
+              label="Colegiaturas del Ciclo"
+              value={`${confirmadosMensual}/${totalMeses}`}
+              icon={<TrendingUp className="w-5 h-5" />}
+              color="red"
+              progress={(confirmadosMensual / totalMeses) * 100}
+              sublabel={`${totalMeses} meses en el ciclo`}
+            />
           </div>
         </section>
 
-        {/* Payments List Section */}
+        {/* ── MONTHLY CALENDAR + DUE DATES ─────────────────────────── */}
+        {user && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <MonthlyCalendar pagos={pagos} nivel={user.nivelEscolar} />
+            <DueDatesPanel nivel={user.nivelEscolar} />
+          </div>
+        )}
+
+        {/* ── PAYMENTS LIST ────────────────────────────────────────── */}
         <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-cyan-400" />
-                <span>Estado de Conceptos de Pago</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Seleccione la pestaña para consultar sus pagos anuales o colegiatura mensual
-              </p>
+          {/* Tab header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-cyan-400" />
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Estado de Conceptos</h2>
             </div>
 
-            {/* Pestañas: Pago Anual y Pago Mensual */}
-            <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedConceptTab('ANUAL')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 border cursor-pointer ${
-                  selectedConceptTab === 'ANUAL'
-                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Pago Anual</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 font-mono">
-                  {pagos.filter((p) => p.tipo === 'ANUAL').length}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedConceptTab('MENSUAL')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 border cursor-pointer ${
-                  selectedConceptTab === 'MENSUAL'
-                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>Pago Mensual</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 font-mono">
-                  {pagos.filter((p) => p.tipo === 'MENSUAL').length}
-                </span>
-              </button>
+            <div className="flex items-center gap-2 bg-slate-900/80 p-1 rounded-2xl border border-slate-800 w-fit">
+              {(['ANUAL', 'MENSUAL'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setSelectedConceptTab(tab)}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer border ${
+                    selectedConceptTab === tab
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md shadow-cyan-500/20'
+                      : 'bg-transparent text-slate-400 border-transparent hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {tab === 'ANUAL' ? <Calendar className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                  {tab === 'ANUAL' ? 'Pagos Anuales' : 'Colegiaturas'}
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-950/50 font-mono">
+                    {pagos.filter((p) => p.tipo === tab).length}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          {/* Cards */}
+          <div className="space-y-3">
             {pagos.filter((p) => p.tipo === selectedConceptTab).length === 0 ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-                No hay conceptos de {selectedConceptTab === 'ANUAL' ? 'Pago Anual' : 'Pago Mensual'} registrados para su nivel escolar.
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800 mx-auto flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-slate-500" />
+                </div>
+                <p className="text-slate-400 text-sm">No hay conceptos de {selectedConceptTab === 'ANUAL' ? 'Pago Anual' : 'Colegiatura Mensual'} registrados.</p>
               </div>
             ) : (
               pagos
-                .filter((pago) => pago.tipo === selectedConceptTab)
+                .filter((p) => p.tipo === selectedConceptTab)
                 .map((pago) => {
                   const isPending = pago.estado === 'Pendiente';
                   const isReview = pago.estado === 'En Revisión';
                   const isConfirmed = pago.estado === 'Confirmado';
                   const isClarification = pago.estado === 'Requiere Aclaración';
 
-                  const currentMonthName = getCurrentMonthName();
-                  const displayConceptoName =
+                  const displayName =
                     pago.tipo === 'MENSUAL'
-                      ? `Colegiatura Mensual (${pago.mesColegiatura || currentMonthName})`
+                      ? `Colegiatura Mensual (${pago.mesColegiatura || getCurrentMonthName()})`
                       : pago.concepto;
 
-                  const platformInfo = getPlatformLinkForConcept(pago.concepto);
+                  const platformInfo = getPlatformInfo(pago.concepto);
                   const vencimientoInfo = formatVencimiento(pago.fechaVencimiento);
+                  const vencConcepto = getVencimientoConcepto(pago.concepto, user?.nivelEscolar || '');
+
+                  const borderClass = isConfirmed
+                    ? 'border-emerald-500/30'
+                    : isReview
+                    ? 'border-blue-500/30'
+                    : isClarification
+                    ? 'border-red-500/40'
+                    : 'border-amber-500/25';
+
+                  const statusDot = isConfirmed
+                    ? 'bg-emerald-400'
+                    : isReview
+                    ? 'bg-blue-400 animate-pulse'
+                    : isClarification
+                    ? 'bg-red-400'
+                    : 'bg-amber-400';
 
                   return (
                     <div
                       key={pago.id}
-                      className={`bg-slate-900 border rounded-xl p-5 transition-all space-y-4 ${
-                        isConfirmed
-                          ? 'border-emerald-500/30 shadow-md shadow-emerald-500/5'
-                          : isReview
-                          ? 'border-blue-500/30'
-                          : isClarification
-                          ? 'border-red-500/50 bg-red-950/10'
-                          : 'border-amber-500/30'
-                      }`}
+                      className={`bg-slate-900/80 border ${borderClass} rounded-2xl overflow-hidden transition-all hover:shadow-lg`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        <div className="space-y-1.5 flex-1">
+                      {/* Card header */}
+                      <div className="flex items-start gap-4 p-5">
+                        {/* Platform logo */}
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-white/90 p-1 flex-shrink-0 shadow-sm">
+                          <Image src={platformInfo.logo} alt={platformInfo.name} fill className="object-contain p-0.5" sizes="48px" />
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="text-base font-bold text-white">{displayConceptoName}</h4>
-                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot}`} />
+                            <h4 className="text-sm font-bold text-white truncate">{displayName}</h4>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
                               {pago.tipo}
                             </span>
                           </div>
 
-                          {/* Fecha de Vencimiento */}
+                          {/* Date from DB */}
                           {vencimientoInfo && (
-                            <div className="flex items-center gap-2 pt-0.5">
-                              <span
-                                className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
-                                  vencimientoInfo.isExpired && !isConfirmed
-                                    ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                                    : 'bg-slate-950 border-slate-800 text-slate-300'
-                                }`}
-                              >
-                                <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>Vencimiento: {vencimientoInfo.formatted}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${vencimientoInfo.isExpired && !isConfirmed ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-slate-800/60 border-slate-700/60 text-slate-300'}`}>
+                                <Calendar className="w-3 h-3 text-cyan-400" />
+                                Vence: {vencimientoInfo.formatted}
                                 {vencimientoInfo.isExpired && !isConfirmed && (
-                                  <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">
-                                    Vencido
-                                  </span>
+                                  <span className="text-[9px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded uppercase ml-1">Vencido</span>
                                 )}
                               </span>
                             </div>
                           )}
 
+                          {/* Static due date from concept logic */}
+                          {!vencimientoInfo && vencConcepto && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 bg-slate-800/60 border-slate-700/60 text-slate-300">
+                                <Calendar className="w-3 h-3 text-cyan-400" />
+                                Vence: {vencConcepto.label}
+                              </span>
+                            </div>
+                          )}
+
                           {pago.numeroConfirmacion && (
-                            <p className="text-xs text-slate-400 pt-0.5">
-                              No. Confirmación reportado:{' '}
-                              <strong className="text-slate-200 font-mono">{pago.numeroConfirmacion}</strong>
+                            <p className="text-xs text-slate-400">
+                              Folio: <strong className="text-slate-200 font-mono">{pago.numeroConfirmacion}</strong>
                             </p>
                           )}
                         </div>
 
-                        {/* Enlace directo a Plataforma correspondiente */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <a
-                            href={platformInfo.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${platformInfo.colorClass}`}
-                            title={`Ir a la plataforma ${platformInfo.name} para realizar el pago`}
-                          >
-                            <span>Ir a {platformInfo.name}</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
+                        {/* Platform link */}
+                        <a
+                          href={platformInfo.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${platformInfo.bg} ${platformInfo.border} ${platformInfo.text} ${platformInfo.hover}`}
+                          title={`Ir a ${platformInfo.name}`}
+                        >
+                          <span className="hidden sm:inline">Ir a {platformInfo.name}</span>
+                          <span className="sm:hidden">Ir</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
 
-                      {/* Texto / Nota del Administrador debajo del concepto */}
+                      {/* Concept note */}
                       {pago.notaConcepto && (
-                        <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 text-xs text-amber-200 space-y-1 animate-fade-in">
-                          <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                        <div className="mx-5 mb-3 p-3 rounded-xl bg-amber-950/20 border border-amber-500/25 text-xs space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-amber-400">
                             <FileText className="w-3.5 h-3.5" />
-                            <span>Nota del Colegio / Instrucciones de Pago:</span>
+                            Nota del Colegio:
                           </div>
-                          <p className="text-slate-200 leading-relaxed pl-5">{pago.notaConcepto}</p>
+                          <p className="text-slate-200 pl-5">{pago.notaConcepto}</p>
                         </div>
                       )}
 
-                      {/* Status Badges & Action Buttons */}
-                      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
-                        <div>
-                          {isConfirmed && (
-                            <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5">
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>Confirmado</span>
-                            </div>
-                          )}
-
-                          {isReview && (
-                            <div className="px-3.5 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5 max-w-sm">
-                              <Clock className="w-4 h-4 text-blue-400 shrink-0" />
-                              <span>En Revisión: El colegio está verificando el reporte recibido. (Espere de 1 a 3 días)</span>
-                            </div>
-                          )}
-
-                          {isClarification && (
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                              <div className="px-3.5 py-1.5 rounded-xl bg-red-500/10 border border-red-500/40 text-red-400 text-xs font-bold flex items-center gap-1.5">
-                                <AlertTriangle className="w-4 h-4" />
-                                <span>Requiere Aclaración</span>
-                              </div>
-                              <button
-                                onClick={() => openClarifyModal(pago)}
-                                className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-md shadow-red-500/20 cursor-pointer"
-                              >
-                                <span>Responder Aclaración</span>
-                              </button>
-                            </div>
-                          )}
+                      {/* Knotion special note */}
+                      {!vencimientoInfo && vencConcepto?.nota && !pago.notaConcepto && (
+                        <div className="mx-5 mb-3 p-3 rounded-xl bg-teal-950/20 border border-teal-500/20 text-xs flex items-start gap-2">
+                          <Info className="w-3.5 h-3.5 text-teal-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-teal-200">{vencConcepto.nota}</p>
                         </div>
+                      )}
 
-                        {isPending && (
-                          <button
-                            onClick={() => openReportModal(pago)}
-                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-500/20 flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Reportar Pago</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Clarification reason notice if present */}
+                      {/* Clarification detail */}
                       {isClarification && (
-                        <div className="mt-3 p-4 rounded-xl bg-red-950/30 border border-red-500/30 space-y-2">
+                        <div className="mx-5 mb-3 p-4 rounded-xl bg-red-950/25 border border-red-500/25 space-y-2">
                           <div className="text-xs font-bold text-red-400 flex items-center gap-1.5">
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>Motivo de Aclaración señalado por la administración:</span>
+                            Motivo indicado por la administración:
                           </div>
-                          <p className="text-xs text-slate-200 italic bg-slate-950/60 p-2.5 rounded-lg border border-red-500/20">
-                            "{pago.motivoAclaracion || 'Por favor revise su folio de pago con la coordinación.'}"
+                          <p className="text-xs text-slate-200 italic bg-slate-950/50 p-2 rounded-lg border border-red-500/15">
+                            &quot;{pago.motivoAclaracion || 'Por favor revise su folio con la coordinación.'}&quot;
                           </p>
-
                           {pago.respuestaAlumno && (
-                            <div className="text-xs text-slate-300 pt-1">
-                              <span className="font-semibold text-cyan-400">Su última respuesta enviada:</span>{' '}
-                              <span className="text-slate-200 font-mono">{pago.respuestaAlumno}</span>
-                            </div>
+                            <p className="text-xs text-slate-300 pt-1">
+                              <span className="text-cyan-400 font-semibold">Su última respuesta:</span>{' '}
+                              <span className="font-mono">{pago.respuestaAlumno}</span>
+                            </p>
                           )}
                         </div>
                       )}
+
+                      {/* Action bar */}
+                      <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-slate-800/80 bg-slate-950/30">
+                        <div>
+                          {isConfirmed && (
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                              <CheckCircle2 className="w-4 h-4" />
+                              Pago Confirmado
+                            </div>
+                          )}
+                          {isReview && (
+                            <div className="flex items-center gap-1.5 text-xs text-blue-300">
+                              <Clock className="w-4 h-4 text-blue-400 animate-pulse" />
+                              En Revisión · Espere de 1 a 3 días hábiles
+                            </div>
+                          )}
+                          {isClarification && (
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-red-400">
+                              <AlertTriangle className="w-4 h-4" />
+                              Requiere Aclaración
+                            </div>
+                          )}
+                          {isPending && (
+                            <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                              <Clock className="w-4 h-4" />
+                              Pago pendiente de reportar
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {isClarification && (
+                            <button
+                              onClick={() => openClarifyModal(pago)}
+                              className="px-3 py-1.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-red-500/20 cursor-pointer"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              Responder
+                            </button>
+                          )}
+                          {isPending && (
+                            <button
+                              onClick={() => openReportModal(pago)}
+                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-500/20 flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              Reportar Pago
+                            </button>
+                          )}
+                          {isReview && (
+                            <button
+                              onClick={() => openReportModal(pago)}
+                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-slate-700"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                              Actualizar folio
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })
@@ -628,28 +1014,41 @@ export default function StudentDashboardPage() {
         </section>
       </main>
 
-      {/* Report Payment Modal */}
+      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
+      <footer className="border-t border-slate-800/60 py-4 mt-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-slate-600">
+          <span>Portal de Pagos · Colegio Mexicano © {new Date().getFullYear()}</span>
+          <span>Los pagos son verificados por el departamento de administración.</span>
+        </div>
+      </footer>
+
+      {/* ── MODALS ─────────────────────────────────────────────────────── */}
+
+      {/* Report Payment */}
       {showReportModal && selectedPago && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-scale-up">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Send className="w-5 h-5 text-cyan-400" />
-                <span>Reportar Pago</span>
-              </h3>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 relative">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+                  <Send className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Reportar Pago</h3>
+                  <p className="text-[10px] text-slate-400">Ingrese el folio de confirmación</p>
+                </div>
+              </div>
+              <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2">
-              <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Concepto seleccionado</div>
-              <div className="text-sm font-bold text-cyan-300 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                {selectedPago.concepto}
+            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Concepto seleccionado</div>
+            <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-white/90 p-1 flex-shrink-0">
+                <Image src={getPlatformInfo(selectedPago.concepto).logo} alt="Logo" fill className="object-contain p-0.5" sizes="40px" />
               </div>
+              <span className="text-sm font-bold text-cyan-300">{selectedPago.concepto}</span>
             </div>
 
             <form onSubmit={handleReportSubmit} className="space-y-4">
@@ -666,32 +1065,21 @@ export default function StudentDashboardPage() {
                   autoFocus
                   className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm font-mono"
                 />
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  Ingrese el folio o número de autorización emitido por su banco o por la plataforma correspondiente.
+                <p className="text-xs text-slate-500 mt-2">
+                  Ingrese el folio emitido por su banco o por la plataforma correspondiente.
                 </p>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowReportModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
-                >
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button type="button" onClick={() => setShowReportModal(false)} className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/20 disabled:opacity-60"
                 >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Registrando...</span>
-                    </>
-                  ) : (
-                    <span>Confirmar Reporte</span>
-                  )}
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Registrando...</span></> : <span>Confirmar Reporte</span>}
                 </button>
               </div>
             </form>
@@ -699,67 +1087,51 @@ export default function StudentDashboardPage() {
         </div>
       )}
 
-      {/* Clarification Response Modal */}
+      {/* Clarification */}
       {showClarifyModal && clarifyPago && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 relative">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-400" />
-                <span>Responder Aclaración</span>
-              </h3>
-              <button
-                onClick={() => setShowClarifyModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Responder Aclaración</h3>
+                  <p className="text-[10px] text-slate-400">{clarifyPago.concepto}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowClarifyModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 bg-red-950/20 p-3.5 rounded-xl border border-red-500/30">
-              <div className="text-xs font-bold text-red-400">Observación del Colegio:</div>
-              <p className="text-xs text-slate-200 italic">
-                "{clarifyPago.motivoAclaracion || 'Por favor proporcione información adicional del pago.'}"
-              </p>
+            <div className="p-3 rounded-xl bg-red-950/20 border border-red-500/25">
+              <div className="text-xs font-bold text-red-400 mb-1">Observación del Colegio:</div>
+              <p className="text-xs text-slate-200 italic">&quot;{clarifyPago.motivoAclaracion || 'Por favor proporcione información adicional del pago.'}&quot;</p>
             </div>
 
             <form onSubmit={handleClarifySubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Escriba su respuesta o nuevo número de confirmación
+                  Su respuesta
                 </label>
                 <textarea
                   value={clarifyResponse}
                   onChange={(e) => setClarifyResponse(e.target.value)}
-                  placeholder="Escriba aquí los detalles solicitados o la aclaración correspondiente..."
+                  placeholder="Escriba aquí los detalles solicitados..."
                   rows={4}
                   required
                   autoFocus
-                  className="w-full p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                  className="w-full p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm resize-none"
                 />
               </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowClarifyModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
-                >
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button type="button" onClick={() => setShowClarifyModal(false)} className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold">
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-red-500/20"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Enviando...</span>
-                    </>
-                  ) : (
-                    <span>Enviar Respuesta</span>
-                  )}
+                <button type="submit" disabled={submitting} className="px-5 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-red-500/20 disabled:opacity-60">
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Enviando...</span></> : <span>Enviar Respuesta</span>}
                 </button>
               </div>
             </form>
@@ -767,98 +1139,83 @@ export default function StudentDashboardPage() {
         </div>
       )}
 
-      {/* Tutorial Modal (Video / Document walkthrough) */}
+      {/* Tutorial */}
       {showTutorialModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400">
-                  <PlayCircle className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+                  <PlayCircle className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Guía Tutorial: Registro y Confirmación de Pagos</h3>
-                  <p className="text-xs text-slate-400">Pasos para verificar y reportar sus pagos de plataformas escolar</p>
+                  <h3 className="text-base font-bold text-white">Guía de Registro de Pagos</h3>
+                  <p className="text-[10px] text-slate-400">Colegio Mexicano · Portal de Plataformas</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowTutorialModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
+              <button onClick={() => setShowTutorialModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Video Placeholder / Banner */}
-            <div className="relative rounded-xl bg-slate-950 border border-slate-800 aspect-video flex flex-col items-center justify-center text-center p-6 space-y-3 group overflow-hidden">
-              <div className="w-16 h-16 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition-transform">
-                <PlayCircle className="w-10 h-10" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-200">Video Explicativo del Proceso de Pago</h4>
-                <p className="text-xs text-slate-400 max-w-sm mt-1">
-                  Aprenda cómo localizar su número de autorización bancaria y registrarlo en las plataformas institucionales.
-                </p>
-              </div>
+            {/* Platform logos row */}
+            <div className="flex items-center justify-center gap-4 py-2">
+              {[
+                { logo: '/logos/schoolcloud.png', name: 'SchoolCloud' },
+                { logo: '/logos/knotion.png', name: 'Knotion' },
+                { logo: '/logos/lypro.png', name: 'Lypro' },
+              ].map((p) => (
+                <div key={p.name} className="flex flex-col items-center gap-1">
+                  <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-white/90 p-1 shadow-sm">
+                    <Image src={p.logo} alt={p.name} fill className="object-contain p-0.5" sizes="48px" />
+                  </div>
+                  <span className="text-[10px] text-slate-400">{p.name}</span>
+                </div>
+              ))}
             </div>
 
-            {/* Step-by-step document guide */}
-            <div className="space-y-4 text-xs text-slate-300">
-              <h4 className="font-bold text-sm text-cyan-300 uppercase tracking-wider">Pasos para reportar su pago:</h4>
-              <ol className="space-y-3 list-decimal list-inside pl-1 leading-relaxed">
-                <li className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <strong className="text-white">Realice su pago:</strong> Ingrese a la plataforma correspondiente (SchoolCloud, Knotion o Lypro) utilizando los botones superiores de acceso directo.
+            <ol className="space-y-3 text-xs text-slate-300">
+              {[
+                { n: 1, title: 'Realice su pago en la plataforma', desc: 'Use los accesos directos de la tarjeta de perfil (SchoolCloud, Knotion o Lypro) para realizar su pago en línea.' },
+                { n: 2, title: 'Copie el Folio de Confirmación', desc: 'Guarde el número de autorización o folio otorgado por la plataforma o por su banco (transferencia bancaria).' },
+                { n: 3, title: 'Presione "Reportar Pago"', desc: 'En la lista de conceptos pendientes, haga clic en el botón azul "Reportar Pago" del concepto correspondiente.' },
+                { n: 4, title: 'Espere la verificación', desc: 'El estado cambiará a "En Revisión". El departamento de administración validará la transacción en 1 a 3 días hábiles.' },
+              ].map((step) => (
+                <li key={step.n} className="flex gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 font-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">{step.n}</span>
+                  <div>
+                    <p className="font-bold text-white">{step.title}</p>
+                    <p className="text-slate-400 mt-0.5">{step.desc}</p>
+                  </div>
                 </li>
-                <li className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <strong className="text-white">Copie el Folio de Confirmación:</strong> Guarde el número de autorización o folio otorgado por la plataforma o transferencia bancaria.
-                </li>
-                <li className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <strong className="text-white">Presione "Reportar Pago":</strong> En la lista de conceptos de este portal, ubique el concepto pendiente y haga clic en el botón correspondiente.
-                </li>
-                <li className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                  <strong className="text-white">Verificación:</strong> El estado cambiará a <em>"En Revisión"</em> mientras el departamento de administración del colegio valida la transacción (duración estimada de 1 a 3 días hábiles).
-                </li>
-              </ol>
-            </div>
+              ))}
+            </ol>
 
-            <div className="pt-4 border-t border-slate-800 flex justify-end">
-              <button
-                onClick={() => setShowTutorialModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs"
-              >
-                Entendido, cerrar guía
+            <div className="pt-3 border-t border-slate-800 flex justify-end">
+              <button onClick={() => setShowTutorialModal(false)} className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all">
+                ¡Entendido!
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE CONFIRMACIÓN DE CERRAR SESIÓN */}
+      {/* Logout confirm */}
       {showLogoutModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-5">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shadow-inner">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
               <LogOut className="w-7 h-7" />
             </div>
             <div>
               <h3 className="text-lg font-extrabold text-white">¿Cerrar Sesión?</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                ¿Estás seguro de que deseas salir de la plataforma?
-              </p>
+              <p className="text-xs text-slate-400 mt-1">¿Estás seguro de que deseas salir del portal?</p>
             </div>
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowLogoutModal(false)}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer"
-              >
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setShowLogoutModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer">
                 Cancelar
               </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors shadow-lg shadow-rose-600/25 border border-rose-500 cursor-pointer"
-              >
+              <button type="button" onClick={handleLogout} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors shadow-lg shadow-rose-600/25 border border-rose-500 cursor-pointer">
                 Sí, Cerrar Sesión
               </button>
             </div>
