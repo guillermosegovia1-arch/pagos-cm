@@ -37,6 +37,7 @@ import {
   Sparkles,
   BookOpen,
   Compass,
+  UserPlus,
 } from 'lucide-react';
 
 interface Pago {
@@ -65,7 +66,43 @@ interface UserStudent {
   grado: string | null;
   grupo: string | null;
   estado: 'Alta' | 'Baja';
+  createdAt?: string;
+  updatedAt?: string;
   pagos: Pago[];
+}
+
+// 1 Mes calendario (o 30 días) para la etiqueta de Nuevo Ingreso
+function isNuevoIngreso(user: { role?: string; createdAt?: string }): boolean {
+  if (user.role && user.role !== 'ALUMNO') return false;
+  if (!user.createdAt) return false;
+  const created = new Date(user.createdAt);
+  if (isNaN(created.getTime())) return false;
+
+  const now = new Date();
+  const oneMonthAfter = new Date(created);
+  oneMonthAfter.setMonth(oneMonthAfter.getMonth() + 1);
+
+  return now.getTime() >= created.getTime() && now.getTime() <= oneMonthAfter.getTime();
+}
+
+function formatFechaIngreso(createdAtStr?: string): string {
+  if (!createdAtStr) return '';
+  const d = new Date(createdAtStr);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function getDiasRestantesNuevoIngreso(createdAtStr?: string): number {
+  if (!createdAtStr) return 0;
+  const created = new Date(createdAtStr);
+  if (isNaN(created.getTime())) return 0;
+  const oneMonthAfter = new Date(created);
+  oneMonthAfter.setMonth(oneMonthAfter.getMonth() + 1);
+  const diffMs = oneMonthAfter.getTime() - Date.now();
+  return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
 export default function AdminDashboardPage() {
@@ -89,6 +126,8 @@ export default function AdminDashboardPage() {
   // Modals state
   const [showUserModal, setShowUserModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showNuevoIngresoModal, setShowNuevoIngresoModal] = useState(false);
+  const [nuevoIngresoSearch, setNuevoIngresoSearch] = useState('');
   const [editingUser, setEditingUser] = useState<UserStudent | null>(null);
 
   // Form state for Create / Edit user
@@ -660,6 +699,24 @@ export default function AdminDashboardPage() {
     });
   }, [users, selectedGroupTab, searchQuery, selectedStatusFilter, statusDateFilter]);
 
+  // Alumnos Nuevo Ingreso (registrados en el último mes)
+  const nuevoIngresoStudents = useMemo(() => {
+    return users.filter((u) => isNuevoIngreso(u));
+  }, [users]);
+
+  const filteredNuevoIngresoStudents = useMemo(() => {
+    if (!nuevoIngresoSearch.trim()) return nuevoIngresoStudents;
+    const q = nuevoIngresoSearch.toLowerCase().trim();
+    return nuevoIngresoStudents.filter(
+      (s) =>
+        s.nombre.toLowerCase().includes(q) ||
+        s.usuario.toLowerCase().includes(q) ||
+        s.nivelEscolar.toLowerCase().includes(q) ||
+        (s.grado && s.grado.toLowerCase().includes(q)) ||
+        (s.grupo && s.grupo.toLowerCase().includes(q))
+    );
+  }, [nuevoIngresoStudents, nuevoIngresoSearch]);
+
   // Metric Calculation for Dashboard
   const metrics = useMemo(() => {
     const studentsOnly = users.filter((u) => u.role === 'ALUMNO');
@@ -745,6 +802,7 @@ export default function AdminDashboardPage() {
       numeroConfirmacion: string | null;
       fechaConfirmado: string | null;
       comentarioAdmin: string | null;
+      createdAt?: string;
     }> = [];
 
     users
@@ -763,6 +821,7 @@ export default function AdminDashboardPage() {
               numeroConfirmacion: p.numeroConfirmacion,
               fechaConfirmado: p.fechaConfirmado,
               comentarioAdmin: p.comentarioAdmin,
+              createdAt: u.createdAt,
             });
           }
         });
@@ -1262,7 +1321,7 @@ export default function AdminDashboardPage() {
 
             {/* KPI Summary Cards */}
             {!isSupervisor && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* Total Alumnos Activos */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
                   <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -1272,6 +1331,28 @@ export default function AdminDashboardPage() {
                   <div className="text-3xl font-extrabold text-white mt-2">{metrics.activeStudents}</div>
                   <div className="text-[11px] text-slate-500 mt-1">Registrados en plataforma</div>
                 </div>
+
+                {/* Alumnos Nuevo Ingreso (CLICKABLE) */}
+                <button
+                  type="button"
+                  onClick={() => setShowNuevoIngresoModal(true)}
+                  className="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-5 shadow-xl relative overflow-hidden text-left transition-all hover:scale-[1.02] cursor-pointer group"
+                  title="Haz clic para ver la lista de alumnos de nuevo ingreso"
+                >
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all">
+                    <Sparkles className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-400 group-hover:text-emerald-300 transition-colors uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Alumnos Nuevo Ingreso</span>
+                  </div>
+                  <div className="text-3xl font-extrabold text-emerald-400 mt-2">
+                    {nuevoIngresoStudents.length}
+                  </div>
+                  <div className="text-[11px] text-emerald-400/80 mt-1 flex items-center gap-1 font-semibold">
+                    <span>Ver lista completa</span>
+                    <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
 
                 {/* Cuántos han pagado */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
@@ -1541,7 +1622,15 @@ export default function AdminDashboardPage() {
                               {formatDateDisplay(item.fechaConfirmado) || 'Sin Fecha'}
                             </td>
                             <td className="p-3.5 font-bold text-slate-100">
-                              <div>{item.studentName}</div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span>{item.studentName}</span>
+                                {isNuevoIngreso({ role: 'ALUMNO', createdAt: (item as any).createdAt }) && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shadow-sm shadow-emerald-500/10">
+                                    <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                                    (Nuevo Ingreso - {formatFechaIngreso((item as any).createdAt)})
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-[11px] text-slate-400 font-mono">{item.usuario}</div>
                             </td>
                             <td className="p-3.5 text-slate-300">
@@ -1963,7 +2052,15 @@ export default function AdminDashboardPage() {
                                 {student.nombre.charAt(0)}
                               </div>
                               <div>
-                                <div>{student.nombre}</div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span>{student.nombre}</span>
+                                  {isNuevoIngreso(student) && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shadow-sm shadow-emerald-500/10">
+                                      <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                                      (Nuevo Ingreso - {formatFechaIngreso(student.createdAt)})
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-[11px] text-slate-400 font-mono">{student.usuario}</div>
                               </div>
                             </td>
@@ -2080,7 +2177,15 @@ export default function AdminDashboardPage() {
                             {u.role === 'ADMIN' ? 'AD' : u.role === 'SUPERVISOR' ? 'SP' : u.nombre.charAt(0)}
                           </div>
                           <div>
-                            <div>{u.nombre}</div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{u.nombre}</span>
+                              {isNuevoIngreso(u) && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shadow-sm shadow-emerald-500/10">
+                                  <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                                  (Nuevo Ingreso - {formatFechaIngreso(u.createdAt)})
+                                </span>
+                              )}
+                            </div>
                             {u.role === 'ADMIN' && (
                               <span className="text-[10px] font-bold text-indigo-400">ADMINISTRADOR</span>
                             )}
@@ -3047,6 +3152,173 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ALUMNOS NUEVO INGRESO */}
+      {showNuevoIngresoModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">Alumnos de Nuevo Ingreso</h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      {nuevoIngresoStudents.length} {nuevoIngresoStudents.length === 1 ? 'Alumno' : 'Alumnos'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Alumnos registrados por el administrador durante el último mes. La etiqueta permanecerá activa durante 30 días posteriores al registro.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNuevoIngresoModal(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search filter */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, usuario, nivel escolar, grado o grupo..."
+                value={nuevoIngresoSearch}
+                onChange={(e) => setNuevoIngresoSearch(e.target.value)}
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs"
+              />
+              {nuevoIngresoSearch && (
+                <button
+                  type="button"
+                  onClick={() => setNuevoIngresoSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* List / Table */}
+            <div className="flex-1 overflow-y-auto space-y-2 border border-slate-800/80 rounded-2xl bg-slate-950/50 p-2">
+              {filteredNuevoIngresoStudents.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 text-xs space-y-2">
+                  <Users className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+                  <p className="font-semibold text-slate-400">
+                    {nuevoIngresoSearch
+                      ? 'No se encontraron alumnos con el criterio de búsqueda.'
+                      : 'No hay alumnos registrados en el último mes.'}
+                  </p>
+                  <p className="text-[11px] text-slate-600">
+                    Cuando un administrador registre a un alumno, aparecerá aquí durante 30 días con la etiqueta activa.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {filteredNuevoIngresoStudents.map((st) => {
+                    const diasRestantes = getDiasRestantesNuevoIngreso(st.createdAt);
+                    const totalConceptos = st.pagos.length;
+                    const confirmados = st.pagos.filter((p) => p.estado === 'Confirmado').length;
+
+                    return (
+                      <div
+                        key={st.id}
+                        className="p-3.5 hover:bg-slate-900/80 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-sm shrink-0">
+                            {st.nombre.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-slate-100 text-sm">{st.nombre}</span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-sm shadow-emerald-500/10">
+                                <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                                (Nuevo Ingreso - {formatFechaIngreso(st.createdAt)})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 flex-wrap">
+                              <span className="font-mono text-cyan-400 font-medium">@{st.usuario}</span>
+                              <span>•</span>
+                              <span className="text-slate-300 font-semibold">{st.nivelEscolar}</span>
+                              {st.grado && st.grupo && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-400 font-mono">
+                                    {st.grado}º "{st.grupo}"
+                                  </span>
+                                </>
+                              )}
+                              <span>•</span>
+                              <span className="text-emerald-400/90 text-[11px] font-medium">
+                                {diasRestantes > 0 ? `${diasRestantes} días restantes con etiqueta` : 'Último día con etiqueta'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:self-center self-end shrink-0">
+                          {/* Payment mini summary */}
+                          <div className="text-right">
+                            <div className="text-[11px] text-slate-400 font-medium">
+                              Conceptos: <strong className="text-white">{confirmados}</strong>/{totalConceptos}
+                            </div>
+                            <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                style={{
+                                  width: `${(confirmados / (totalConceptos || 1)) * 100}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Jump to Verificación button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNuevoIngresoModal(false);
+                              setActiveTabSection('verificacion');
+                              if (st.grado && st.grupo) {
+                                setSelectedGroupTab(`${st.grado}${st.grupo}`);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-bold transition-all border border-slate-700 hover:border-cyan-400 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <span>Ver Pagos</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+              <span className="text-slate-500">
+                Mostrando {filteredNuevoIngresoStudents.length} de {nuevoIngresoStudents.length} alumnos de nuevo ingreso
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowNuevoIngresoModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}
