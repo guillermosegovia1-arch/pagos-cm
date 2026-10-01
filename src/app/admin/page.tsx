@@ -29,7 +29,14 @@ import {
   CalendarDays,
   FileText,
   ArrowRight,
-  Layers
+  Layers,
+  Pencil,
+  GraduationCap,
+  Baby,
+  HeartHandshake,
+  Sparkles,
+  BookOpen,
+  Compass,
 } from 'lucide-react';
 
 interface Pago {
@@ -122,6 +129,39 @@ export default function AdminDashboardPage() {
   const [cicloEscolarInput, setCicloEscolarInput] = useState('2026 - 2027');
   const [savingCiclo, setSavingCiclo] = useState(false);
 
+  // Custom Groups state from DB
+  const [customGroups, setCustomGroups] = useState<Array<{ nivelEscolar: string; grado: string; grupo: string; name: string }>>([]);
+
+  // Migration to next cycle state (Only active from July)
+  // JavaScript getMonth(): 0 = January, 6 = July, 7 = August...
+  const isJulyOrLater = new Date().getMonth() >= 6;
+  const [showMigrateModal, setShowMigrateModal] = useState(false);
+  const [migratingCycle, setMigratingCycle] = useState(false);
+  const [migrateNewCiclo, setMigrateNewCiclo] = useState('');
+
+  // Delete Graduates state
+  const [showDeleteGraduatesModal, setShowDeleteGraduatesModal] = useState(false);
+  const [deletingGraduates, setDeletingGraduates] = useState(false);
+
+  // Edit Group Modal state
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [editingGroupData, setEditingGroupData] = useState<{
+    oldGroupKey: string;
+    newGrado: string;
+    newGrupo: string;
+    newNivelEscolar?: string;
+  }>({ oldGroupKey: '', newGrado: '', newGrupo: '', newNivelEscolar: '' });
+  const [savingGroup, setSavingGroup] = useState(false);
+
+  // Add Group Modal state
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+  const [newGroupData, setNewGroupData] = useState<{
+    nivelEscolar: string;
+    grado: string;
+    grupo: string;
+  }>({ nivelEscolar: 'Primaria', grado: '1', grupo: 'A' });
+  const [addingGroup, setAddingGroup] = useState(false);
+
   const fetchUsers = async () => {
     try {
       const res = await fetch('/api/admin/students');
@@ -140,8 +180,21 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const fetchCustomGroups = async () => {
+    try {
+      const res = await fetch('/api/admin/groups');
+      const data = await res.json();
+      if (data.customGroups) {
+        setCustomGroups(data.customGroups);
+      }
+    } catch (err) {
+      console.error('Error fetching custom groups:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchCustomGroups();
     fetch('/api/settings/ciclo-escolar')
       .then((res) => res.json())
       .then((data) => {
@@ -149,6 +202,154 @@ export default function AdminDashboardPage() {
       })
       .catch((err) => console.error('Error loading ciclo escolar setting:', err));
   }, []);
+
+  const getNextCicloEscolar = (curr: string) => {
+    const years = curr.match(/\d{4}/g);
+    if (years && years.length >= 2) {
+      const y1 = parseInt(years[0], 10) + 1;
+      const y2 = parseInt(years[1], 10) + 1;
+      return `${y1} - ${y2}`;
+    }
+    return curr;
+  };
+
+  const openMigrateModal = () => {
+    setMigrateNewCiclo(getNextCicloEscolar(cicloEscolarInput));
+    setShowMigrateModal(true);
+  };
+
+  const handleMigrateCycle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMigratingCycle(true);
+    try {
+      const res = await fetch('/api/admin/migrate-cycle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newCicloEscolar: migrateNewCiclo }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al ejecutar la migración');
+
+      if (data.cicloEscolar) {
+        setCicloEscolarInput(data.cicloEscolar);
+      }
+      setFeedback({
+        type: 'success',
+        text: `Migración completada exitosamente. Se promovieron los alumnos y ${data.graduatesCount} alumnos pasaron a la pestaña Egresados.`,
+      });
+      setShowMigrateModal(false);
+      fetchUsers();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message });
+    } finally {
+      setMigratingCycle(false);
+    }
+  };
+
+  const handleDeleteGraduates = async () => {
+    setDeletingGraduates(true);
+    try {
+      const res = await fetch('/api/admin/students/graduates', {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al eliminar egresados');
+
+      setFeedback({
+        type: 'success',
+        text: `Se eliminaron exitosamente ${data.deletedCount} alumnos de la lista de Egresados.`,
+      });
+      setShowDeleteGraduatesModal(false);
+      setSelectedGroupTab('Administración');
+      fetchUsers();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message });
+    } finally {
+      setDeletingGraduates(false);
+    }
+  };
+
+  const openEditGroup = (groupName: string) => {
+    // Try to parse grade and group from groupName
+    const match = groupName.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
+    const detectedGrado = match ? match[1] : groupName;
+    const detectedGrupo = match ? match[2] : '';
+
+    // Detect level based on grade
+    let lvl = 'Primaria';
+    const gUpper = detectedGrado.toUpperCase();
+    if (gUpper === 'N1') lvl = 'Pre - Maternal';
+    else if (gUpper === 'N2') lvl = 'Maternal';
+    else if (['K1', 'K2', 'K3'].includes(gUpper)) lvl = 'Kinder';
+    else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) lvl = 'Primaria';
+    else if (['7', '8', '9'].includes(gUpper)) lvl = 'Secundaria';
+    else if (['10', '11', '12'].includes(gUpper)) lvl = 'Preparatoria';
+
+    setEditingGroupData({
+      oldGroupKey: groupName,
+      newGrado: detectedGrado,
+      newGrupo: detectedGrupo,
+      newNivelEscolar: lvl,
+    });
+    setShowEditGroupModal(true);
+  };
+
+  const handleRenameGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingGroup(true);
+    try {
+      const res = await fetch('/api/admin/groups/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingGroupData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al renombrar el grupo');
+
+      setFeedback({
+        type: 'success',
+        text: data.message || 'Grupo renombrado correctamente.',
+      });
+      setShowEditGroupModal(false);
+      if (selectedGroupTab === editingGroupData.oldGroupKey && data.newGroupKey) {
+        setSelectedGroupTab(data.newGroupKey);
+      }
+      fetchUsers();
+      fetchCustomGroups();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message });
+    } finally {
+      setSavingGroup(false);
+    }
+  };
+
+  const handleAddGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingGroup(true);
+    try {
+      const res = await fetch('/api/admin/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newGroupData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al agregar el grupo');
+
+      const createdName = data.newGroup?.name || `${newGroupData.grado}${newGroupData.grupo}`;
+      setFeedback({
+        type: 'success',
+        text: `Pestaña de grupo "${createdName}" creada exitosamente.`,
+      });
+      setShowAddGroupModal(false);
+      setSelectedGroupTab(createdName);
+      setNewGroupData({ nivelEscolar: 'Primaria', grado: '1', grupo: 'A' });
+      fetchCustomGroups();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message });
+    } finally {
+      setAddingGroup(false);
+    }
+  };
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -274,7 +475,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Group Tabs Calculation (SIN "TODOS", "Administración" PRIMERA opción)
+  // Group Tabs Calculation (SIN "TODOS", "Administración" PRIMERA opción, "Egresados", grupos dinámicos y grupos personalizados)
   const groupTabsMap = useMemo(() => {
     const map = new Map<string, number>();
 
@@ -282,9 +483,16 @@ export default function AdminDashboardPage() {
     const adminCount = users.filter((u) => u.nivelEscolar === 'No aplica' || u.role === 'ADMIN').length;
     map.set('Administración', adminCount);
 
+    // Egresados tab
+    const egresadosCount = users.filter(
+      (u) => u.role === 'ALUMNO' && (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados')
+    ).length;
+    map.set('Egresados', egresadosCount);
+
     // Dynamic groups detected from users/Excel
     users.forEach((u) => {
       if (u.nivelEscolar === 'No aplica' || u.role === 'ADMIN') return;
+      if (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados') return;
 
       // If status filter is active, check if student has matching pagos
       if (selectedStatusFilter !== 'TODOS') {
@@ -309,8 +517,78 @@ export default function AdminDashboardPage() {
       map.set(groupKey, (map.get(groupKey) || 0) + 1);
     });
 
+    // Custom empty groups from DB
+    customGroups.forEach((cg) => {
+      const gKey = cg.name || `${cg.grado}${cg.grupo}`;
+      if (!map.has(gKey)) {
+        map.set(gKey, 0);
+      }
+    });
+
     return Array.from(map.entries());
-  }, [users, selectedStatusFilter, statusDateFilter]);
+  }, [users, selectedStatusFilter, statusDateFilter, customGroups]);
+
+  // Pestañas agrupadas y ordenadas por nivel escolar estricto:
+  // 1. Pre - Maternal N1, 2. Maternal N2, 3. Kinder K1..K3, 4. Primaria 1..6, 5. Secundaria 7..9, 6. Preparatoria 10..12, 7. Egresados, 8. Administración
+  const leveledGroupTabs = useMemo(() => {
+    const levelOrder = [
+      { key: 'n1', title: 'Pre - Maternal (N1)', order: 1, icon: Baby, color: 'text-amber-400 border-amber-500/30' },
+      { key: 'n2', title: 'Maternal (N2)', order: 2, icon: HeartHandshake, color: 'text-orange-400 border-orange-500/30' },
+      { key: 'kinder', title: 'Kinder (K1, K2, K3)', order: 3, icon: Sparkles, color: 'text-yellow-400 border-yellow-500/30' },
+      { key: 'primaria', title: 'Primaria (1, 2, 3, 4, 5, 6)', order: 4, icon: BookOpen, color: 'text-cyan-400 border-cyan-500/30' },
+      { key: 'secundaria', title: 'Secundaria (7, 8, 9)', order: 5, icon: Compass, color: 'text-indigo-400 border-indigo-500/30' },
+      { key: 'preparatoria', title: 'Preparatoria (10, 11, 12)', order: 6, icon: GraduationCap, color: 'text-purple-400 border-purple-500/30' },
+      { key: 'egresados', title: 'Egresados', order: 7, icon: GraduationCap, color: 'text-rose-400 border-rose-500/30' },
+      { key: 'admin', title: 'Administración', order: 8, icon: ShieldCheck, color: 'text-emerald-400 border-emerald-500/30' },
+      { key: 'otros', title: 'Otros Grupos', order: 9, icon: Layers, color: 'text-slate-400 border-slate-500/30' },
+    ];
+
+    const mapByLevel = new Map<string, Array<[string, number]>>();
+    levelOrder.forEach((l) => mapByLevel.set(l.key, []));
+
+    groupTabsMap.forEach(([groupName, count]) => {
+      let targetKey = 'otros';
+      if (groupName === 'Administración') {
+        targetKey = 'admin';
+      } else if (groupName === 'Egresados') {
+        targetKey = 'egresados';
+      } else {
+        const g = groupName.toUpperCase().trim();
+        if (g.startsWith('N1') || g.includes('PRE - MATERNAL') || g.includes('PRE-MATERNAL')) {
+          targetKey = 'n1';
+        } else if (g.startsWith('N2') || g.includes('MATERNAL')) {
+          targetKey = 'n2';
+        } else if (g.startsWith('K1') || g.startsWith('K2') || g.startsWith('K3') || g.includes('KINDER')) {
+          targetKey = 'kinder';
+        } else if (
+          ((g.startsWith('1') || g.startsWith('2') || g.startsWith('3') || g.startsWith('4') || g.startsWith('5') || g.startsWith('6')) &&
+            !g.startsWith('10') &&
+            !g.startsWith('11') &&
+            !g.startsWith('12')) ||
+          g.includes('PRIMARIA')
+        ) {
+          targetKey = 'primaria';
+        } else if (g.startsWith('7') || g.startsWith('8') || g.startsWith('9') || g.includes('SECUNDARIA')) {
+          targetKey = 'secundaria';
+        } else if (g.startsWith('10') || g.startsWith('11') || g.startsWith('12') || g.includes('PREPA')) {
+          targetKey = 'preparatoria';
+        }
+      }
+
+      mapByLevel.get(targetKey)?.push([groupName, count]);
+    });
+
+    return levelOrder
+      .map((level) => {
+        const groups = mapByLevel.get(level.key) || [];
+        groups.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' }));
+        return {
+          ...level,
+          groups,
+        };
+      })
+      .filter((level) => level.groups.length > 0);
+  }, [groupTabsMap]);
 
   // Set default group tab if current selected group is not in list
   useEffect(() => {
@@ -329,6 +607,8 @@ export default function AdminDashboardPage() {
       let groupKey = 'Sin Grupo';
       if (u.nivelEscolar === 'No aplica' || u.role === 'ADMIN') {
         groupKey = 'Administración';
+      } else if (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados') {
+        groupKey = 'Egresados';
       } else if (u.grado && u.grupo) {
         groupKey = `${u.grado}${u.grupo}`;
       } else if (u.nivelEscolar) {
@@ -497,13 +777,38 @@ export default function AdminDashboardPage() {
   // User Create / Edit Handlers
   const openCreateUserModal = () => {
     setEditingUser(null);
+
+    // Pre-populate with currently selected tab if it is a student group
+    let initialNivel = 'Primaria';
+    let initialGrado = '1';
+    let initialGrupo = 'A';
+
+    if (selectedGroupTab && selectedGroupTab !== 'Administración' && selectedGroupTab !== 'Egresados') {
+      const match = selectedGroupTab.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
+      if (match) {
+        initialGrado = match[1];
+        initialGrupo = match[2];
+        const gUpper = initialGrado.toUpperCase();
+        if (gUpper === 'N1') initialNivel = 'Pre - Maternal';
+        else if (gUpper === 'N2') initialNivel = 'Maternal';
+        else if (['K1', 'K2', 'K3'].includes(gUpper)) initialNivel = 'Kinder';
+        else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) initialNivel = 'Primaria';
+        else if (['7', '8', '9'].includes(gUpper)) initialNivel = 'Secundaria';
+        else if (['10', '11', '12'].includes(gUpper)) initialNivel = 'Preparatoria';
+      }
+    } else if (selectedGroupTab === 'Egresados') {
+      initialNivel = 'Egresados';
+      initialGrado = '12';
+      initialGrupo = 'A';
+    }
+
     setFormData({
       nombre: '',
       usuario: '',
       password: '',
-      nivelEscolar: 'Primaria',
-      grado: '1',
-      grupo: 'A',
+      nivelEscolar: initialNivel,
+      grado: initialGrado,
+      grupo: initialGrupo,
       estado: 'Alta',
     });
     setShowPasswordChangeFields(false);
@@ -855,15 +1160,37 @@ export default function AdminDashboardPage() {
             </button>
           </div>
 
-          {activeTabSection === 'gestion' && (
+          <div className="flex items-center gap-2.5 flex-wrap">
             <button
-              onClick={openCreateUserModal}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-cyan-500/20 shrink-0"
+              type="button"
+              onClick={openMigrateModal}
+              disabled={!isJulyOrLater}
+              title={
+                isJulyOrLater
+                  ? 'Migrar alumnos al siguiente grado escolar para el nuevo ciclo'
+                  : 'Esta función se activará automáticamente a partir del mes de Julio'
+              }
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-md shrink-0 ${
+                isJulyOrLater
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20 cursor-pointer'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-60'
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              <span>Nuevo Alumno / Usuario</span>
+              <GraduationCap className="w-4 h-4" />
+              <span>Migrar alumnos a nuevo ciclo escolar</span>
+              {!isJulyOrLater && <span className="text-[10px] text-amber-400/90 font-mono">(A partir de Julio)</span>}
             </button>
-          )}
+
+            {activeTabSection === 'gestion' && (
+              <button
+                onClick={openCreateUserModal}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-cyan-500/20 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nuevo Alumno / Usuario</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* SECTION 1: DASHBOARD Y MÉTRICAS */}
@@ -871,7 +1198,7 @@ export default function AdminDashboardPage() {
           <div className="space-y-6 animate-fade-in">
             {/* CONFIGURACIÓN DEL CICLO ESCOLAR */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-cyan-400" />
@@ -881,6 +1208,22 @@ export default function AdminDashboardPage() {
                     Este texto se mostrará públicamente en la pantalla de inicio de sesión (Login) y en el panel de cada alumno.
                   </p>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={openMigrateModal}
+                  disabled={!isJulyOrLater}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                    isJulyOrLater
+                      ? 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 cursor-pointer'
+                      : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed opacity-60'
+                  }`}
+                  title={isJulyOrLater ? 'Iniciar migración de grado escolar' : 'Disponible a partir del mes de Julio'}
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  <span>Migrar al Siguiente Ciclo</span>
+                  {!isJulyOrLater && <span className="text-[10px] text-amber-400">(Julio)</span>}
+                </button>
               </div>
 
               <form onSubmit={handleSaveCicloEscolar} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
@@ -1173,13 +1516,12 @@ export default function AdminDashboardPage() {
                       <th className="p-3.5">Nivel / Grupo</th>
                       <th className="p-3.5">Concepto Confirmado</th>
                       <th className="p-3.5">No. Confirmación / Folio</th>
-                      <th className="p-3.5">Comentarios del Colegio</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {filteredConfirmedPaymentsByRange.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={5} className="p-8 text-center text-slate-500 font-medium">
                           No se encontraron pagos confirmados entre las fechas seleccionadas.
                         </td>
                       </tr>
@@ -1209,9 +1551,6 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="p-3.5 font-mono text-slate-200">
                             {item.numeroConfirmacion || <span className="text-slate-500 italic">No proporcionado</span>}
-                          </td>
-                          <td className="p-3.5 text-slate-300 italic max-w-xs truncate">
-                            {item.comentarioAdmin || <span className="text-slate-600">Sin comentarios</span>}
                           </td>
                         </tr>
                       ))
@@ -1245,38 +1584,87 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* GROUP TABS CONTAINER (Estilo cuadrícula envuelta/multi-fila igual a la imagen) */}
-            <div className="bg-slate-950/90 border border-slate-800/90 rounded-2xl p-4 shadow-2xl space-y-3">
-              <div className="flex items-center justify-between">
+            {/* GROUP TABS CONTAINER (SEPARADAS POR NIVELES ESCOLARES) */}
+            <div className="bg-slate-950/90 border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                 <span className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
                   <Layers className="w-4 h-4 text-emerald-400" />
-                  <span>Pestañas de Grupo Asignadas ({groupTabsMap.length} Pestañas):</span>
+                  <span>Pestañas de Grupo Asignadas por Nivel ({groupTabsMap.length} Pestañas en Total):</span>
                 </span>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddGroupModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm self-start sm:self-auto"
+                  title="Crear una nueva pestaña de grupo"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Agregar Pestaña</span>
+                </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 max-h-[350px] overflow-y-auto pr-1">
-                {groupTabsMap.map(([groupName, count]) => {
-                  const isSelected = selectedGroupTab === groupName;
+              {/* Leveled Groups Sections (Orden: Pre - Maternal N1, Maternal N2, Kinder K1..K3, Primaria 1..6, Secundaria 7..9, Preparatoria 10..12, Egresados, Administración) */}
+              <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1 divide-y divide-slate-800/40">
+                {leveledGroupTabs.map((level) => {
+                  const LevelIcon = level.icon;
                   return (
-                    <button
-                      key={groupName}
-                      type="button"
-                      onClick={() => setSelectedGroupTab(groupName)}
-                      className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all flex items-center gap-2 border cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-lg shadow-emerald-500/25 scale-105'
-                          : 'bg-slate-900/90 text-emerald-400 border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-500/10'
-                      }`}
-                    >
-                      <span>{groupName}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
-                          isSelected ? 'bg-slate-950 text-emerald-400' : 'bg-emerald-500/20 text-emerald-300'
-                        }`}
-                      >
-                        {count}
-                      </span>
-                    </button>
+                    <div key={level.key} className="pt-3 first:pt-0 space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                        <LevelIcon className={`w-3.5 h-3.5 ${level.color.split(' ')[0]}`} />
+                        <span className="tracking-wide uppercase text-[11px] text-slate-300 font-extrabold">{level.title}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">({level.groups.length} grupos)</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {level.groups.map(([groupName, count]) => {
+                          const isSelected = selectedGroupTab === groupName;
+                          const isSpecial = groupName === 'Administración' || groupName === 'Egresados';
+                          return (
+                            <div
+                              key={groupName}
+                              className={`group relative inline-flex items-center rounded-full text-xs font-extrabold transition-all border ${
+                                isSelected
+                                  ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-lg shadow-emerald-500/25 scale-105 z-10'
+                                  : 'bg-slate-900/90 text-emerald-400 border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-500/10'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setSelectedGroupTab(groupName)}
+                                className="px-3 py-1.5 flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <span>{groupName}</span>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+                                    isSelected ? 'bg-slate-950 text-emerald-400' : 'bg-emerald-500/20 text-emerald-300'
+                                  }`}
+                                >
+                                  {count}
+                                </span>
+                              </button>
+
+                              {!isSpecial && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditGroup(groupName);
+                                  }}
+                                  title={`Editar nombre de pestaña (${groupName})`}
+                                  className={`pr-2.5 pl-0.5 py-1.5 transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'text-slate-800 hover:text-slate-950'
+                                      : 'text-emerald-500/50 hover:text-white'
+                                  }`}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -1313,6 +1701,33 @@ export default function AdminDashboardPage() {
                 Mostrando <strong className="text-cyan-400">{filteredUsers.filter(u => u.role === 'ALUMNO').length}</strong> alumnos
               </div>
             </div>
+
+            {/* Banner exclusivo para Egresados con botón de eliminar la lista */}
+            {selectedGroupTab === 'Egresados' && (
+              <div className="p-4 bg-rose-950/20 border-b border-rose-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                <div className="flex items-center gap-2.5 text-xs text-rose-300">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-rose-200 text-sm">Pestaña de Alumnos Egresados</div>
+                    <div className="text-[11px] text-rose-300/80">
+                      Aquí se muestran los alumnos graduados de 12º de Preparatoria que completaron su ciclo.
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteGraduatesModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-rose-600/25 cursor-pointer shrink-0"
+                  title="Eliminar permanentemente todos los alumnos egresados"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar Lista de Egresados</span>
+                </button>
+              </div>
+            )}
 
             {/* Banner de filtro activo */}
             {selectedStatusFilter !== 'TODOS' && (
@@ -1545,6 +1960,33 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
             </div>
+
+            {/* Banner exclusivo para Egresados con botón de eliminar la lista */}
+            {selectedGroupTab === 'Egresados' && (
+              <div className="p-4 bg-rose-950/20 border-b border-rose-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                <div className="flex items-center gap-2.5 text-xs text-rose-300">
+                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-rose-200 text-sm">Lista de Alumnos Egresados</div>
+                    <div className="text-[11px] text-rose-300/80">
+                      Alumnos graduados de 12º de Preparatoria. Puede gestionar sus cuentas o vaciar la lista completa.
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteGraduatesModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-rose-600/25 cursor-pointer shrink-0"
+                  title="Eliminar permanentemente todos los alumnos egresados"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar Lista de Egresados</span>
+                </button>
+              </div>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
@@ -1861,6 +2303,56 @@ export default function AdminDashboardPage() {
                 )}
               </div>
 
+              {/* Quick Group Assignment Selector */}
+              {formData.nivelEscolar !== 'No aplica' && (
+                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
+                  <label className="block font-semibold text-emerald-400 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                    <span>Asignar a Pestaña de Grupo Existente</span>
+                    <span className="text-[10px] text-slate-500 font-normal">Auto-asigna grado y grupo</span>
+                  </label>
+                  <select
+                    value={
+                      groupTabsMap.some(([name]) => name === `${formData.grado}${formData.grupo}`)
+                        ? `${formData.grado}${formData.grupo}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val) return;
+                      const match = val.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
+                      if (match) {
+                        const g = match[1];
+                        const gr = match[2];
+                        let lvl = formData.nivelEscolar;
+                        const gUpper = g.toUpperCase();
+                        if (gUpper === 'N1') lvl = 'Pre - Maternal';
+                        else if (gUpper === 'N2') lvl = 'Maternal';
+                        else if (['K1', 'K2', 'K3'].includes(gUpper)) lvl = 'Kinder';
+                        else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) lvl = 'Primaria';
+                        else if (['7', '8', '9'].includes(gUpper)) lvl = 'Secundaria';
+                        else if (['10', '11', '12'].includes(gUpper)) lvl = 'Preparatoria';
+                        setFormData((prev) => ({
+                          ...prev,
+                          nivelEscolar: lvl,
+                          grado: g,
+                          grupo: gr,
+                        }));
+                      }
+                    }}
+                    className="w-full p-2.5 bg-slate-900 border border-emerald-500/30 rounded-lg text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold cursor-pointer"
+                  >
+                    <option value="">-- Seleccionar grupo existente --</option>
+                    {groupTabsMap
+                      .filter(([name]) => name !== 'Administración' && name !== 'Egresados')
+                      .map(([name, count]) => (
+                        <option key={name} value={name}>
+                          Grupo {name} ({count} alumnos)
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
               {/* Nivel Escolar dropdown with "No aplica" */}
               <div>
                 <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
@@ -1871,13 +2363,13 @@ export default function AdminDashboardPage() {
                   onChange={handleNivelChange}
                   className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
                 >
-                  <option value="Pre-Maternal y Maternal">Pre-Maternal y Maternal</option>
-                  <option value="Kínder 1">Kínder 1</option>
-                  <option value="Kínder 2">Kínder 2</option>
-                  <option value="Kínder 3">Kínder 3</option>
-                  <option value="Primaria">Primaria</option>
-                  <option value="Secundaria">Secundaria</option>
-                  <option value="Preparatoria">Preparatoria</option>
+                  <option value="Pre - Maternal">Pre - Maternal (N1)</option>
+                  <option value="Maternal">Maternal (N2)</option>
+                  <option value="Kinder">Kinder (K1, K2, K3)</option>
+                  <option value="Primaria">Primaria (1º a 6º)</option>
+                  <option value="Secundaria">Secundaria (7º a 9º)</option>
+                  <option value="Preparatoria">Preparatoria (10º a 12º)</option>
+                  <option value="Egresados">Egresados</option>
                   <option value="No aplica">No aplica (Admin)</option>
                 </select>
               </div>
@@ -1885,31 +2377,74 @@ export default function AdminDashboardPage() {
               {/* Grado & Grupo - Disabled if "No aplica" */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Grado
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-300 uppercase tracking-wider">
+                      Grado
+                    </label>
+                    {formData.nivelEscolar !== 'No aplica' && (
+                      <span className="text-[10px] text-slate-400">Sugerencias</span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={formData.grado}
                     disabled={formData.nivelEscolar === 'No aplica'}
                     onChange={(e) => setFormData({ ...formData, grado: e.target.value })}
                     placeholder="Ej. 1"
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   />
+                  {/* Quick Grade Suggestions */}
+                  {formData.nivelEscolar !== 'No aplica' && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {formData.nivelEscolar === 'Pre - Maternal' && (
+                        <button type="button" onClick={() => setFormData({ ...formData, grado: 'N1' })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">N1</button>
+                      )}
+                      {formData.nivelEscolar === 'Maternal' && (
+                        <button type="button" onClick={() => setFormData({ ...formData, grado: 'N2' })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">N2</button>
+                      )}
+                      {formData.nivelEscolar === 'Kinder' && ['K1', 'K2', 'K3'].map(k => (
+                        <button key={k} type="button" onClick={() => setFormData({ ...formData, grado: k })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{k}</button>
+                      ))}
+                      {formData.nivelEscolar === 'Primaria' && ['1', '2', '3', '4', '5', '6'].map(k => (
+                        <button key={k} type="button" onClick={() => setFormData({ ...formData, grado: k })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{k}º</button>
+                      ))}
+                      {formData.nivelEscolar === 'Secundaria' && ['7', '8', '9'].map(k => (
+                        <button key={k} type="button" onClick={() => setFormData({ ...formData, grado: k })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{k}º</button>
+                      ))}
+                      {formData.nivelEscolar === 'Preparatoria' && ['10', '11', '12'].map(k => (
+                        <button key={k} type="button" onClick={() => setFormData({ ...formData, grado: k })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{k}º</button>
+                      ))}
+                      {formData.nivelEscolar === 'Egresados' && (
+                        <button type="button" onClick={() => setFormData({ ...formData, grado: '12' })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">12</button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Grupo
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-300 uppercase tracking-wider">
+                      Grupo
+                    </label>
+                    {formData.nivelEscolar !== 'No aplica' && (
+                      <span className="text-[10px] text-slate-400">Letras</span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={formData.grupo}
                     disabled={formData.nivelEscolar === 'No aplica'}
                     onChange={(e) => setFormData({ ...formData, grupo: e.target.value })}
                     placeholder="Ej. A"
-                    className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   />
+                  {formData.nivelEscolar !== 'No aplica' && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {['A', 'B', 'C', 'D', 'E'].map(grp => (
+                        <button key={grp} type="button" onClick={() => setFormData({ ...formData, grupo: grp })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{grp}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2120,6 +2655,336 @@ export default function AdminDashboardPage() {
                 Sí, Cerrar Sesión
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE MIGRACIÓN DE CICLO ESCOLAR */}
+      {showMigrateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Migración a Nuevo Ciclo Escolar</h3>
+                  <p className="text-xs text-emerald-400 font-semibold">Promoción general de alumnos de grado</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMigrateModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-2xl text-xs text-slate-200 space-y-2">
+              <div className="font-bold text-white text-sm">
+                ¿Está seguro de hacer la migración de alumnos al siguiente grado escolar?
+              </div>
+              <p className="text-slate-400">
+                Al confirmar la migración de ciclo escolar, se aplicarán las siguientes promociones automáticas:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px] text-slate-300 font-medium">
+                <div>• Pre - Maternal (N1) → <strong>Maternal (N2)</strong></div>
+                <div>• Maternal (N2) → <strong>Kinder (K1)</strong></div>
+                <div>• Kinder (K1 → K2 → K3)</div>
+                <div>• Kinder K3 → <strong>1º Primaria</strong></div>
+                <div>• Primaria (1º a 5º → 2º a 6º)</div>
+                <div>• Primaria 6º → <strong>7º Secundaria</strong></div>
+                <div>• Secundaria (7º y 8º → 8º y 9º)</div>
+                <div>• Secundaria 9º → <strong>10º Preparatoria</strong></div>
+                <div>• Preparatoria (10º y 11º → 11º y 12º)</div>
+                <div className="text-rose-400 font-bold">• 12º Preparatoria → <strong>Pestaña Egresados</strong></div>
+              </div>
+              <p className="text-[11px] text-emerald-300/80 pt-1">
+                * Los conceptos de pago de todos los alumnos activos se reiniciarán en 'Pendiente' con los conceptos del nuevo ciclo escolar.
+              </p>
+            </div>
+
+            <form onSubmit={handleMigrateCycle} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Nombre del Nuevo Ciclo Escolar
+                </label>
+                <input
+                  type="text"
+                  value={migrateNewCiclo}
+                  onChange={(e) => setMigrateNewCiclo(e.target.value)}
+                  placeholder="Ej. 2027 - 2028"
+                  required
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-bold font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMigrateModal(false)}
+                  disabled={migratingCycle}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={migratingCycle}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-extrabold text-slate-950 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 transition-all shadow-lg shadow-emerald-500/25 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {migratingCycle ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Migrando alumnos...</span>
+                    </>
+                  ) : (
+                    <span>Sí, Realizar Migración</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA ELIMINAR LISTA DE EGRESADOS */}
+      {showDeleteGraduatesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-5">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shadow-inner">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-lg font-extrabold text-white">¿Eliminar Lista de Egresados?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                ¿Está seguro de eliminar a todos los alumnos que se encuentran en la pestaña de Egresados? Esta acción eliminará permanentemente sus cuentas de la plataforma y no se puede deshacer.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteGraduatesModal(false)}
+                disabled={deletingGraduates}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteGraduates}
+                disabled={deletingGraduates}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors shadow-lg shadow-rose-600/25 border border-rose-500 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {deletingGraduates ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <span>Sí, Eliminar Lista</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA EDITAR NOMBRE DE PESTAÑA / GRUPO (LÁPIZ) */}
+      {showEditGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Editar Pestaña de Grupo</h3>
+                  <p className="text-xs text-slate-400">Pestaña actual: <strong className="text-cyan-400">{editingGroupData.oldGroupKey}</strong></p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditGroupModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRenameGroup} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                    Grado
+                  </label>
+                  <input
+                    type="text"
+                    value={editingGroupData.newGrado}
+                    onChange={(e) => setEditingGroupData({ ...editingGroupData, newGrado: e.target.value })}
+                    placeholder="Ej. 1"
+                    required
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-cyan-500 text-sm font-bold font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                    Grupo
+                  </label>
+                  <input
+                    type="text"
+                    value={editingGroupData.newGrupo}
+                    onChange={(e) => setEditingGroupData({ ...editingGroupData, newGrupo: e.target.value })}
+                    placeholder="Ej. A"
+                    required
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-cyan-500 text-sm font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400">
+                Nuevo nombre resultante: <strong className="text-cyan-300 font-mono text-xs">{editingGroupData.newGrado}{editingGroupData.newGrupo}</strong>. Todos los alumnos registrados en este grupo serán actualizados automáticamente.
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditGroupModal(false)}
+                  disabled={savingGroup}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingGroup}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-cyan-500 hover:bg-cyan-400 transition-colors shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {savingGroup ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Nombre</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA AGREGAR NUEVA PESTAÑA DE GRUPO */}
+      {showAddGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Agregar Nueva Pestaña</h3>
+                  <p className="text-xs text-slate-400">Cree un grupo asignable a alumnos</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddGroupModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddGroup} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Nivel Escolar
+                </label>
+                <select
+                  value={newGroupData.nivelEscolar}
+                  onChange={(e) => {
+                    const lvl = e.target.value;
+                    let defGrado = '1';
+                    if (lvl === 'Pre - Maternal') defGrado = 'N1';
+                    else if (lvl === 'Maternal') defGrado = 'N2';
+                    else if (lvl === 'Kinder') defGrado = 'K1';
+                    else if (lvl === 'Primaria') defGrado = '1';
+                    else if (lvl === 'Secundaria') defGrado = '7';
+                    else if (lvl === 'Preparatoria') defGrado = '10';
+                    setNewGroupData({ ...newGroupData, nivelEscolar: lvl, grado: defGrado });
+                  }}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-emerald-500 text-xs font-semibold"
+                >
+                  <option value="Pre - Maternal">Pre - Maternal (N1)</option>
+                  <option value="Maternal">Maternal (N2)</option>
+                  <option value="Kinder">Kinder (K1, K2, K3)</option>
+                  <option value="Primaria">Primaria (1º a 6º)</option>
+                  <option value="Secundaria">Secundaria (7º a 9º)</option>
+                  <option value="Preparatoria">Preparatoria (10º a 12º)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                    Grado
+                  </label>
+                  <input
+                    type="text"
+                    value={newGroupData.grado}
+                    onChange={(e) => setNewGroupData({ ...newGroupData, grado: e.target.value })}
+                    placeholder="Ej. 1 o K1"
+                    required
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-emerald-500 text-sm font-bold font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                    Grupo
+                  </label>
+                  <input
+                    type="text"
+                    value={newGroupData.grupo}
+                    onChange={(e) => setNewGroupData({ ...newGroupData, grupo: e.target.value })}
+                    placeholder="Ej. A"
+                    required
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:ring-2 focus:ring-emerald-500 text-sm font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400">
+                Pestaña resultante: <strong className="text-emerald-400 font-mono text-xs">{newGroupData.grado}{newGroupData.grupo}</strong>. Aparecerá en el nivel <strong className="text-slate-200">{newGroupData.nivelEscolar}</strong> y podrá asignarle alumnos inmediatamente.
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddGroupModal(false)}
+                  disabled={addingGroup}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingGroup}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-colors shadow-lg shadow-emerald-500/25 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {addingGroup ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Creando...</span>
+                    </>
+                  ) : (
+                    <span>Crear Pestaña</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

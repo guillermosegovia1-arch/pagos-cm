@@ -32,3 +32,6 @@ prisma/dev.db-journal
 # vercel & cloudflare
 .vercel
 .dev.vars
+
+# typescript
+*.tsbuildinfo

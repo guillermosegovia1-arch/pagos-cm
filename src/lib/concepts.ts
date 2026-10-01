@@ -8,6 +8,7 @@ export const NIVELES_ESCOLARES = [
   'Primaria',
   'Secundaria',
   'Preparatoria',
+  'Egresados',
   'No aplica',
 ] as const;
 
@@ -19,7 +20,7 @@ export interface ConceptDefinition {
 }
 
 export function getConceptosForNivel(nivel: string): ConceptDefinition[] {
-  if (!nivel || nivel.trim().toLowerCase() === 'no aplica') {
+  if (!nivel || nivel.trim().toLowerCase() === 'no aplica' || nivel.trim().toLowerCase() === 'egresados') {
     return [];
   }
 
