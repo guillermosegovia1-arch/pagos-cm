@@ -28,6 +28,8 @@ import {
   Bell,
   CheckCheck,
   Trash2,
+  Download,
+  Copy,
 } from 'lucide-react';
 import { getConceptosForNivel } from '@/lib/concepts';
 
@@ -561,22 +563,43 @@ const PlatformCard: React.FC<{
   bg: string;
   border: string;
   hover: string;
-}> = ({ name, url, logo, desc, bg, border, hover }) => (
-  <a
-    href={url}
-    target="_blank"
-    rel="noopener noreferrer"
-    className={`group flex flex-col items-center gap-3 p-4 rounded-2xl border ${bg} ${border} ${hover} transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer`}
-  >
-    <div className="relative w-14 h-14 rounded-2xl overflow-hidden bg-white/90 p-1 shadow-sm group-hover:scale-105 transition-transform duration-200">
-      <Image src={logo} alt={name} fill className="object-contain p-0.5" sizes="56px" />
-    </div>
-    <div className="text-center">
-      <p className="text-xs font-bold text-slate-100 group-hover:text-white">{name}</p>
-      <p className="text-[10px] text-slate-500">{desc}</p>
-    </div>
-    <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-slate-300 transition-colors" />
-  </a>
+  manualUrl?: string;
+  onManualClick?: () => void;
+}> = ({ name, url, logo, desc, bg, border, hover, manualUrl, onManualClick }) => (
+  <div className={`group flex flex-col items-center gap-2 p-3.5 rounded-2xl border ${bg} ${border} ${hover} transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5`}>
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex flex-col items-center gap-2.5 cursor-pointer w-full"
+    >
+      <div className="relative w-14 h-14 rounded-2xl overflow-hidden bg-white/90 p-1 shadow-sm group-hover:scale-105 transition-transform duration-200">
+        <Image src={logo} alt={name} fill className="object-contain p-0.5" sizes="56px" />
+      </div>
+      <div className="text-center">
+        <p className="text-xs font-bold text-slate-100 group-hover:text-white flex items-center justify-center gap-1">
+          <span>{name}</span>
+          <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-slate-300 transition-colors" />
+        </p>
+        <p className="text-[10px] text-slate-500">{desc}</p>
+      </div>
+    </a>
+    {manualUrl && (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onManualClick) onManualClick();
+          else window.open(manualUrl, '_blank');
+        }}
+        className="w-full mt-0.5 py-1 px-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-[10px] font-bold text-red-300 hover:text-red-200 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+        title="Ver manual de usuario en PDF"
+      >
+        <FileText className="w-3 h-3 text-red-400" />
+        <span>Manual PDF</span>
+      </button>
+    )}
+  </div>
 );
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -687,6 +710,16 @@ export default function StudentDashboardPage() {
   const [clarifyResponse, setClarifyResponse] = useState('');
   const [showClarifyModal, setShowClarifyModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showLyproManualModal, setShowLyproManualModal] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleCopySchoolCode = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText('COLMEX-002');
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2500);
+    }
+  };
 
   // Evitar salir de la sesión al presionar botón Atrás en el navegador
   useEffect(() => {
@@ -1175,6 +1208,8 @@ export default function StudentDashboardPage() {
                   bg="bg-slate-800/50"
                   border="border-slate-700/60"
                   hover="hover:border-red-400/50 hover:bg-red-500/10"
+                  manualUrl="/manuals/Manual_Usuario_Lypro_2026_2027.pdf"
+                  onManualClick={() => setShowLyproManualModal(true)}
                 />
               </div>
             </div>
@@ -1569,6 +1604,109 @@ export default function StudentDashboardPage() {
                         </div>
                       )}
 
+                      {/* Lypro Manual de Usuario PDF */}
+                      {(platformInfo.name === 'Lypro' || pago.concepto.toLowerCase().includes('lypro')) && (
+                        <div className="mx-5 mb-3 rounded-2xl border border-red-500/30 overflow-hidden bg-slate-950/50 shadow-md">
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-red-500/15 via-rose-500/10 to-transparent border-b border-red-500/20">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-red-400 flex-shrink-0" />
+                              <span className="text-xs font-bold text-red-200">Manual de Usuario Para Pagos en Línea (LYPRO)</span>
+                            </div>
+                            <span className="text-[10px] text-red-300 font-mono font-semibold px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/25">
+                              Ciclo 2026 - 2027
+                            </span>
+                          </div>
+
+                          <div className="p-4 space-y-3">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-red-950/20 border border-red-500/20 p-3.5 rounded-xl">
+                              <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0 mt-0.5">
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-xs font-bold text-white">Guía Oficial Paso a Paso en PDF</p>
+                                  <p className="text-[11px] text-slate-300">
+                                    Instrucciones ilustradas para la compra y pago en línea de su paquete de libros y útiles escolares.
+                                  </p>
+                                  <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                    <span className="text-[11px] text-slate-400">Código del colegio:</span>
+                                    <button
+                                      type="button"
+                                      onClick={handleCopySchoolCode}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-mono font-bold border border-red-500/40 transition-colors cursor-pointer"
+                                      title="Haz clic para copiar el código del colegio"
+                                    >
+                                      <span>COLMEX-002</span>
+                                      {copiedCode ? <CheckCheck className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-red-300" />}
+                                    </button>
+                                    {copiedCode && <span className="text-[10px] text-emerald-400 font-semibold animate-pulse">¡Código copiado!</span>}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowLyproManualModal(true)}
+                                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-red-600/25 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                >
+                                  <BookOpen className="w-3.5 h-3.5" />
+                                  <span>Ver Manual</span>
+                                </button>
+                                <a
+                                  href="/manuals/Manual_Usuario_Lypro_2026_2027.pdf"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition-colors border border-slate-700 flex items-center gap-1.5"
+                                  title="Abrir en pestaña nueva"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Nueva Pestaña</span>
+                                </a>
+                                <a
+                                  href="/manuals/Manual_Usuario_Lypro_2026_2027.pdf"
+                                  download="Manual_Usuario_Lypro_2026_2027.pdf"
+                                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700"
+                                  title="Descargar archivo PDF"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+
+                            {/* Summary Steps from the manual */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                              <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800/80 space-y-1">
+                                <div className="font-bold text-red-300 flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-[10px] font-bold">1</span>
+                                  <span>Padres Sin Registro (Página 2)</span>
+                                </div>
+                                <p className="text-slate-400 pl-5 leading-relaxed">
+                                  Entrar al portal, seleccionar "Registrarse aquí", ingresar clave <strong className="text-slate-200 font-mono">COLMEX-002</strong>, registrar al alumno(a) y agregar paquete al carrito.
+                                </p>
+                              </div>
+
+                              <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800/80 space-y-1">
+                                <div className="font-bold text-red-300 flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-[10px] font-bold">2</span>
+                                  <span>Padres Ya Registrados (Página 9)</span>
+                                </div>
+                                <p className="text-slate-400 pl-5 leading-relaxed">
+                                  Iniciar sesión, ir a "Administrar alumnos" &gt; "Agregar Alumno" para actualizar su grado, proceder a la compra y verificar en "Mis Pedidos".
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90 flex items-center gap-2">
+                              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                              <span>
+                                <strong>Importante:</strong> La entrega del material se realizará <strong>después de 72 horas</strong> de realizar el pedido. Puede elegir entrega a domicilio ($100.00) o en sucursal LYPRO.
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Clarification detail */}
                       {isClarification && (
                         <div className="mx-5 mb-3 p-4 rounded-xl bg-red-950/25 border border-red-500/25 space-y-2">
@@ -1844,6 +1982,90 @@ export default function StudentDashboardPage() {
             <div className="pt-3 border-t border-slate-800 flex justify-end">
               <button onClick={() => setShowTutorialModal(false)} className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all">
                 ¡Entendido!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LYPRO MANUAL PREVIEW MODAL */}
+      {showLyproManualModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900/90">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">Manual de Usuario Para Pagos en Línea (LYPRO)</h3>
+                    <span className="hidden sm:inline-block text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30">
+                      Ciclo 2026 - 2027
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Guía de compra de paquetes de libros y útiles escolares · Código del colegio:{' '}
+                    <strong className="text-red-300 font-mono">COLMEX-002</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href="/manuals/Manual_Usuario_Lypro_2026_2027.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
+                  title="Abrir en pestaña nueva"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Nueva Pestaña</span>
+                </a>
+                <a
+                  href="/manuals/Manual_Usuario_Lypro_2026_2027.pdf"
+                  download="Manual_Usuario_Lypro_2026_2027.pdf"
+                  className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-red-600/20"
+                  title="Descargar archivo PDF"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Descargar PDF</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowLyproManualModal(false)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Cerrar vista previa"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* PDF Viewer */}
+            <div className="flex-1 bg-slate-950 relative">
+              <iframe
+                src="/manuals/Manual_Usuario_Lypro_2026_2027.pdf#toolbar=1"
+                className="w-full h-full border-0"
+                title="Manual de Usuario Lypro"
+              />
+            </div>
+
+            {/* Footer advice */}
+            <div className="px-5 py-3 border-t border-slate-800 bg-slate-900/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 text-slate-400">
+                <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  ¿No puede visualizar el PDF directamente en su dispositivo? Presione <strong>Nueva Pestaña</strong> o <strong>Descargar PDF</strong>.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLyproManualModal(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold self-end sm:self-auto cursor-pointer"
+              >
+                Cerrar
               </button>
             </div>
           </div>
