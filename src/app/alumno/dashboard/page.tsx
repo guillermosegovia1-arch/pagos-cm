@@ -173,7 +173,7 @@ const getPlatformInfo = (concepto: string) => {
   }
   return {
     name: 'SchoolCloud',
-    url: 'https://erp.schoolcloud.net/campus/cm',
+    url: 'http://users.schoolcloud.net/campus/cm',
     logo: '/logos/schoolcloud.png',
     bg: 'bg-sky-500/10',
     border: 'border-sky-500/30',
@@ -1184,7 +1184,7 @@ export default function StudentDashboardPage() {
               <div className="flex items-center gap-2">
                 <PlatformCard
                   name="SchoolCloud"
-                  url="https://erp.schoolcloud.net/campus/cm"
+                  url="http://users.schoolcloud.net/campus/cm"
                   logo="/logos/schoolcloud.png"
                   desc="Control Escolar"
                   bg="bg-slate-800/50"
