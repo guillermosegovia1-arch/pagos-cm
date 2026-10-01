@@ -60,7 +60,7 @@ interface UserStudent {
   nombre: string;
   usuario: string;
   passwordPlain: string;
-  role: 'ADMIN' | 'ALUMNO';
+  role: 'ADMIN' | 'ALUMNO' | 'SUPERVISOR';
   nivelEscolar: string;
   grado: string | null;
   grupo: string | null;
@@ -71,6 +71,8 @@ interface UserStudent {
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [users, setUsers] = useState<UserStudent[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string; nombre: string } | null>(null);
+  const isSupervisor = currentUser?.role === 'SUPERVISOR';
   const [loading, setLoading] = useState(true);
   const [activeTabSection, setActiveTabSection] = useState<'dashboard' | 'verificacion' | 'gestion' | 'importacion'>('dashboard');
   
@@ -193,6 +195,17 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user) {
+          setCurrentUser(data.user);
+          if (data.user.role === 'SUPERVISOR') {
+            setActiveTabSection((prev) => (prev === 'gestion' || prev === 'importacion' ? 'dashboard' : prev));
+          }
+        }
+      })
+      .catch((err) => console.error('Error loading current user:', err));
     fetchUsers();
     fetchCustomGroups();
     fetch('/api/settings/ciclo-escolar')
@@ -417,6 +430,9 @@ export default function AdminDashboardPage() {
 
   // Cambiar de pestaña: al cambiar a Dashboard, Gestión o Importación, se quita el filtrado
   const handleTabChange = (section: 'dashboard' | 'verificacion' | 'gestion' | 'importacion') => {
+    if (isSupervisor && (section === 'gestion' || section === 'importacion')) {
+      return;
+    }
     setActiveTabSection(section);
     if (section !== 'verificacion') {
       setSelectedStatusFilter('TODOS');
@@ -480,7 +496,7 @@ export default function AdminDashboardPage() {
     const map = new Map<string, number>();
 
     // Administración as mandatory first tab
-    const adminCount = users.filter((u) => u.nivelEscolar === 'No aplica' || u.role === 'ADMIN').length;
+    const adminCount = users.filter((u) => u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' || u.role === 'ADMIN' || u.role === 'SUPERVISOR').length;
     map.set('Administración', adminCount);
 
     // Egresados tab
@@ -491,7 +507,7 @@ export default function AdminDashboardPage() {
 
     // Dynamic groups detected from users/Excel
     users.forEach((u) => {
-      if (u.nivelEscolar === 'No aplica' || u.role === 'ADMIN') return;
+      if (u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' || u.role === 'ADMIN' || u.role === 'SUPERVISOR') return;
       if (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados') return;
 
       // If status filter is active, check if student has matching pagos
@@ -605,7 +621,7 @@ export default function AdminDashboardPage() {
     return users.filter((u) => {
       // Group filter (Strict matching)
       let groupKey = 'Sin Grupo';
-      if (u.nivelEscolar === 'No aplica' || u.role === 'ADMIN') {
+      if (u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' || u.role === 'ADMIN' || u.role === 'SUPERVISOR') {
         groupKey = 'Administración';
       } else if (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados') {
         groupKey = 'Egresados';
@@ -838,7 +854,7 @@ export default function AdminDashboardPage() {
 
   const handleNivelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
-    const isNoAplica = val === 'No aplica';
+    const isNoAplica = val === 'No aplica' || val === 'No aplica (Supervisor)';
     setFormData((prev) => ({
       ...prev,
       nivelEscolar: val,
@@ -872,6 +888,8 @@ export default function AdminDashboardPage() {
       const isEdit = !!editingUser;
       const url = isEdit ? `/api/admin/students/${editingUser.id}` : '/api/admin/students';
       const method = isEdit ? 'PUT' : 'POST';
+      const isSupervisorNivel = formData.nivelEscolar === 'No aplica (Supervisor)';
+      const isNoAplica = formData.nivelEscolar === 'No aplica' || isSupervisorNivel;
 
       const res = await fetch(url, {
         method,
@@ -881,9 +899,10 @@ export default function AdminDashboardPage() {
           usuario: formData.usuario,
           password: finalPasswordToSubmit,
           nivelEscolar: formData.nivelEscolar,
-          grado: formData.nivelEscolar === 'No aplica' ? null : formData.grado,
-          grupo: formData.nivelEscolar === 'No aplica' ? null : formData.grupo,
+          grado: isNoAplica ? null : formData.grado,
+          grupo: isNoAplica ? null : formData.grupo,
           estado: formData.estado,
+          role: isSupervisorNivel ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : 'ALUMNO',
         }),
       });
 
@@ -922,6 +941,7 @@ export default function AdminDashboardPage() {
 
   // Payment Quick Edit & Comment Modal Handler
   const openEditPagoModal = (pago: Pago, studentName: string) => {
+    if (isSupervisor) return;
     setEditingPago(pago);
     setEditingStudentName(studentName);
     setPagoStatus(pago.estado);
@@ -1135,53 +1155,37 @@ export default function AdminDashboardPage() {
               <span>Panel de Verificación de Pagos</span>
             </button>
 
-            <button
-              onClick={() => handleTabChange('gestion')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
-                activeTabSection === 'gestion'
-                  ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                  : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Gestión de Alumnos</span>
-            </button>
+            {!isSupervisor && (
+              <>
+                <button
+                  onClick={() => handleTabChange('gestion')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'gestion'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Gestión de Alumnos</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange('importacion')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
-                activeTabSection === 'importacion'
-                  ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                  : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              <span>Importación Masiva Excel</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange('importacion')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'importacion'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Importación Masiva Excel</span>
+                </button>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={openMigrateModal}
-              disabled={!isJulyOrLater}
-              title={
-                isJulyOrLater
-                  ? 'Migrar alumnos al siguiente grado escolar para el nuevo ciclo'
-                  : 'Esta función se activará automáticamente a partir del mes de Julio'
-              }
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-md shrink-0 ${
-                isJulyOrLater
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20 cursor-pointer'
-                  : 'bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-60'
-              }`}
-            >
-              <GraduationCap className="w-4 h-4" />
-              <span>Migrar alumnos a nuevo ciclo escolar</span>
-              {!isJulyOrLater && <span className="text-[10px] text-amber-400/90 font-mono">(A partir de Julio)</span>}
-            </button>
-
-            {activeTabSection === 'gestion' && (
+            {!isSupervisor && activeTabSection === 'gestion' && (
               <button
                 onClick={openCreateUserModal}
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-cyan-500/20 shrink-0"
@@ -1197,107 +1201,111 @@ export default function AdminDashboardPage() {
         {activeTabSection === 'dashboard' && (
           <div className="space-y-6 animate-fade-in">
             {/* CONFIGURACIÓN DEL CICLO ESCOLAR */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-cyan-400" />
-                    <span>Configuración del Ciclo Escolar Actual</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Este texto se mostrará públicamente en la pantalla de inicio de sesión (Login) y en el panel de cada alumno.
-                  </p>
+            {!isSupervisor && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-cyan-400" />
+                      <span>Configuración del Ciclo Escolar Actual</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Este texto se mostrará públicamente en la pantalla de inicio de sesión (Login) y en el panel de cada alumno.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={openMigrateModal}
+                    disabled={!isJulyOrLater}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                      isJulyOrLater
+                        ? 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 cursor-pointer'
+                        : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed opacity-60'
+                    }`}
+                    title={isJulyOrLater ? 'Iniciar migración de grado escolar' : 'Disponible a partir del mes de Julio'}
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Migrar al Siguiente Ciclo</span>
+                    {!isJulyOrLater && <span className="text-[10px] text-amber-400">(Julio)</span>}
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={openMigrateModal}
-                  disabled={!isJulyOrLater}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
-                    isJulyOrLater
-                      ? 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 cursor-pointer'
-                      : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed opacity-60'
-                  }`}
-                  title={isJulyOrLater ? 'Iniciar migración de grado escolar' : 'Disponible a partir del mes de Julio'}
-                >
-                  <GraduationCap className="w-4 h-4" />
-                  <span>Migrar al Siguiente Ciclo</span>
-                  {!isJulyOrLater && <span className="text-[10px] text-amber-400">(Julio)</span>}
-                </button>
+                <form onSubmit={handleSaveCicloEscolar} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={cicloEscolarInput}
+                      onChange={(e) => setCicloEscolarInput(e.target.value)}
+                      placeholder="Ej. 2026 - 2027"
+                      required
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-xs font-bold font-mono"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingCiclo}
+                    className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    {savingCiclo ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Guardando...</span>
+                      </>
+                    ) : (
+                      <span>Guardar Ciclo Escolar</span>
+                    )}
+                  </button>
+                </form>
               </div>
-
-              <form onSubmit={handleSaveCicloEscolar} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={cicloEscolarInput}
-                    onChange={(e) => setCicloEscolarInput(e.target.value)}
-                    placeholder="Ej. 2026 - 2027"
-                    required
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-xs font-bold font-mono"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={savingCiclo}
-                  className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
-                >
-                  {savingCiclo ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Guardando...</span>
-                    </>
-                  ) : (
-                    <span>Guardar Ciclo Escolar</span>
-                  )}
-                </button>
-              </form>
-            </div>
+            )}
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Total Alumnos Activos */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-                <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-                  <Users className="w-5 h-5" />
+            {!isSupervisor && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Total Alumnos Activos */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Alumnos Activos</div>
+                  <div className="text-3xl font-extrabold text-white mt-2">{metrics.activeStudents}</div>
+                  <div className="text-[11px] text-slate-500 mt-1">Registrados en plataforma</div>
                 </div>
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Alumnos Activos</div>
-                <div className="text-3xl font-extrabold text-white mt-2">{metrics.activeStudents}</div>
-                <div className="text-[11px] text-slate-500 mt-1">Registrados en plataforma</div>
-              </div>
 
-              {/* Cuántos han pagado */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-                <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <CheckCircle2 className="w-5 h-5" />
+                {/* Cuántos han pagado */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alumnos que Pagaron</div>
+                  <div className="text-3xl font-extrabold text-emerald-400 mt-2">{metrics.studentsWhoPaidCount}</div>
+                  <div className="text-[11px] text-emerald-400/80 mt-1 font-semibold">
+                    {metrics.confirmedCount} conceptos confirmados en total
+                  </div>
                 </div>
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alumnos que Pagaron</div>
-                <div className="text-3xl font-extrabold text-emerald-400 mt-2">{metrics.studentsWhoPaidCount}</div>
-                <div className="text-[11px] text-emerald-400/80 mt-1 font-semibold">
-                  {metrics.confirmedCount} conceptos confirmados en total
-                </div>
-              </div>
 
-              {/* Cuántas bajas */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-                <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
-                  <UserX className="w-5 h-5" />
+                {/* Cuántas bajas */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                    <UserX className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alumnos Dados de Baja</div>
+                  <div className="text-3xl font-extrabold text-red-400 mt-2">{metrics.bajasStudents}</div>
+                  <div className="text-[11px] text-slate-500 mt-1">Estatus inactivo en el colegio</div>
                 </div>
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alumnos Dados de Baja</div>
-                <div className="text-3xl font-extrabold text-red-400 mt-2">{metrics.bajasStudents}</div>
-                <div className="text-[11px] text-slate-500 mt-1">Estatus inactivo en el colegio</div>
-              </div>
 
-              {/* Tasa de Cumplimiento */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-                <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                  <TrendingUp className="w-5 h-5" />
+                {/* Tasa de Cumplimiento */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tasa de Confirmación</div>
+                  <div className="text-3xl font-extrabold text-indigo-300 mt-2">{metrics.completionPercentage}%</div>
+                  <div className="text-[11px] text-slate-500 mt-1">{metrics.confirmedCount} de {metrics.totalPagos} conceptos</div>
                 </div>
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tasa de Confirmación</div>
-                <div className="text-3xl font-extrabold text-indigo-300 mt-2">{metrics.completionPercentage}%</div>
-                <div className="text-[11px] text-slate-500 mt-1">{metrics.confirmedCount} de {metrics.totalPagos} conceptos</div>
               </div>
-            </div>
+            )}
 
             {/* Visual Charts Row */}
             <div className="grid grid-cols-1 gap-6">
@@ -1470,95 +1478,97 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* QUIÉNES PAGARON POR FECHA TABLE SECTION (CON SELECTOR DE RANGO DE FECHAS) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4">
-              <div className="p-4 bg-slate-950 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-cyan-400" />
-                    <span>Reporte de Alumnos que Pagaron por Fecha</span>
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Seleccione el rango de fechas para consultar las confirmaciones realizadas.
-                  </p>
-                </div>
-
-                {/* Date Range Selector (Rango de fechas entre Inicio y Fin) */}
-                <div className="flex flex-wrap items-center gap-3 bg-slate-900 p-2 rounded-xl border border-slate-800">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                    <span className="font-semibold">Desde:</span>
-                    <input
-                      type="date"
-                      value={startDateFilter}
-                      onChange={(e) => setStartDateFilter(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-cyan-300 font-mono focus:ring-2 focus:ring-cyan-500"
-                    />
+            {!isSupervisor && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4">
+                <div className="p-4 bg-slate-950 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-cyan-400" />
+                      <span>Reporte de Alumnos que Pagaron por Fecha</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Seleccione el rango de fechas para consultar las confirmaciones realizadas.
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                    <span className="font-semibold">Hasta:</span>
-                    <input
-                      type="date"
-                      value={endDateFilter}
-                      onChange={(e) => setEndDateFilter(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-cyan-300 font-mono focus:ring-2 focus:ring-cyan-500"
-                    />
+                  {/* Date Range Selector (Rango de fechas entre Inicio y Fin) */}
+                  <div className="flex flex-wrap items-center gap-3 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                      <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="font-semibold">Desde:</span>
+                      <input
+                        type="date"
+                        value={startDateFilter}
+                        onChange={(e) => setStartDateFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-cyan-300 font-mono focus:ring-2 focus:ring-cyan-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                      <span className="font-semibold">Hasta:</span>
+                      <input
+                        type="date"
+                        value={endDateFilter}
+                        onChange={(e) => setEndDateFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-cyan-300 font-mono focus:ring-2 focus:ring-cyan-500"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-950/80 text-slate-300 font-bold uppercase border-b border-slate-800">
-                      <th className="p-3.5">Fecha Confirmación</th>
-                      <th className="p-3.5">Alumno</th>
-                      <th className="p-3.5">Nivel / Grupo</th>
-                      <th className="p-3.5">Concepto Confirmado</th>
-                      <th className="p-3.5">No. Confirmación / Folio</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {filteredConfirmedPaymentsByRange.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="p-8 text-center text-slate-500 font-medium">
-                          No se encontraron pagos confirmados entre las fechas seleccionadas.
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-950/80 text-slate-300 font-bold uppercase border-b border-slate-800">
+                        <th className="p-3.5">Fecha Confirmación</th>
+                        <th className="p-3.5">Alumno</th>
+                        <th className="p-3.5">Nivel / Grupo</th>
+                        <th className="p-3.5">Concepto Confirmado</th>
+                        <th className="p-3.5">No. Confirmación / Folio</th>
                       </tr>
-                    ) : (
-                      filteredConfirmedPaymentsByRange.map((item) => (
-                        <tr key={item.pagoId} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="p-3.5 font-mono text-cyan-300 font-bold">
-                            {formatDateDisplay(item.fechaConfirmado) || 'Sin Fecha'}
-                          </td>
-                          <td className="p-3.5 font-bold text-slate-100">
-                            <div>{item.studentName}</div>
-                            <div className="text-[11px] text-slate-400 font-mono">{item.usuario}</div>
-                          </td>
-                          <td className="p-3.5 text-slate-300">
-                            <span className="font-semibold text-slate-200">{item.nivelEscolar}</span>
-                            {item.grado && item.grupo && (
-                              <span className="block text-[11px] text-slate-400">
-                                {item.grado}º "{item.grupo}"
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold inline-flex items-center gap-1.5">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>{item.concepto}</span>
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-mono text-slate-200">
-                            {item.numeroConfirmacion || <span className="text-slate-500 italic">No proporcionado</span>}
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filteredConfirmedPaymentsByRange.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-slate-500 font-medium">
+                            No se encontraron pagos confirmados entre las fechas seleccionadas.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredConfirmedPaymentsByRange.map((item) => (
+                          <tr key={item.pagoId} className="hover:bg-slate-800/40 transition-colors">
+                            <td className="p-3.5 font-mono text-cyan-300 font-bold">
+                              {formatDateDisplay(item.fechaConfirmado) || 'Sin Fecha'}
+                            </td>
+                            <td className="p-3.5 font-bold text-slate-100">
+                              <div>{item.studentName}</div>
+                              <div className="text-[11px] text-slate-400 font-mono">{item.usuario}</div>
+                            </td>
+                            <td className="p-3.5 text-slate-300">
+                              <span className="font-semibold text-slate-200">{item.nivelEscolar}</span>
+                              {item.grado && item.grupo && (
+                                <span className="block text-[11px] text-slate-400">
+                                  {item.grado}º "{item.grupo}"
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5">
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold inline-flex items-center gap-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{item.concepto}</span>
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-mono text-slate-200">
+                              {item.numeroConfirmacion || <span className="text-slate-500 italic">No proporcionado</span>}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1592,15 +1602,17 @@ export default function AdminDashboardPage() {
                   <span>Pestañas de Grupo Asignadas por Nivel ({groupTabsMap.length} Pestañas en Total):</span>
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => setShowAddGroupModal(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm self-start sm:self-auto"
-                  title="Crear una nueva pestaña de grupo"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Agregar Pestaña</span>
-                </button>
+                {!isSupervisor && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupModal(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm self-start sm:self-auto"
+                    title="Crear una nueva pestaña de grupo"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Agregar Pestaña</span>
+                  </button>
+                )}
               </div>
 
               {/* Leveled Groups Sections (Orden: Pre - Maternal N1, Maternal N2, Kinder K1..K3, Primaria 1..6, Secundaria 7..9, Preparatoria 10..12, Egresados, Administración) */}
@@ -1643,7 +1655,7 @@ export default function AdminDashboardPage() {
                                 </span>
                               </button>
 
-                              {!isSpecial && (
+                              {!isSpecial && !isSupervisor && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -1717,15 +1729,17 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteGraduatesModal(true)}
-                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-rose-600/25 cursor-pointer shrink-0"
-                  title="Eliminar permanentemente todos los alumnos egresados"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Eliminar Lista de Egresados</span>
-                </button>
+                {!isSupervisor && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteGraduatesModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-rose-600/25 cursor-pointer shrink-0"
+                    title="Eliminar permanentemente todos los alumnos egresados"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Eliminar Lista de Egresados</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1778,19 +1792,29 @@ export default function AdminDashboardPage() {
                   <tr className="bg-slate-950/80 text-slate-300 font-bold uppercase border-b border-slate-800">
                     <th className="p-3.5 min-w-[200px]">Nombre del Alumno</th>
                     <th className="p-3.5">Nivel / Grupo</th>
-                    <th className="p-3.5">Inscripción / Reinscripción</th>
-                    <th className="p-3.5">Cuota Tecnología</th>
-                    <th className="p-3.5">Cuota Material</th>
-                    <th className="p-3.5">Cuota Escolar</th>
-                    <th className="p-3.5">Pago Knotion</th>
-                    <th className="p-3.5">Pago Lypro</th>
-                    <th className="p-3.5">Colegiatura</th>
+                    {isSupervisor ? (
+                      <>
+                        <th className="p-3.5">Licencia Knotion</th>
+                        <th className="p-3.5">Cuota de Tecnología</th>
+                        <th className="p-3.5">Cuota de Lypro</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="p-3.5">Inscripción / Reinscripción</th>
+                        <th className="p-3.5">Cuota Tecnología</th>
+                        <th className="p-3.5">Cuota Material</th>
+                        <th className="p-3.5">Cuota Escolar</th>
+                        <th className="p-3.5">Pago Knotion</th>
+                        <th className="p-3.5">Pago Lypro</th>
+                        <th className="p-3.5">Colegiatura</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredUsers.filter(u => u.role === 'ALUMNO').length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
+                      <td colSpan={isSupervisor ? 5 : 9} className="p-8 text-center text-slate-500 font-medium">
                         No hay alumnos con pagos en este criterio en el grupo "{selectedGroupTab}".
                       </td>
                     </tr>
@@ -1888,6 +1912,28 @@ export default function AdminDashboardPage() {
 
                           const formattedDate = formatDateDisplay(pago.fechaConfirmado);
 
+                          if (isSupervisor) {
+                            return (
+                              <div className="flex flex-col items-start gap-1">
+                                <span
+                                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 cursor-default select-none ${badgeColor}`}
+                                  title={`${pago.concepto}${pago.mesColegiatura ? ` (${pago.mesColegiatura})` : ''}`}
+                                >
+                                  <span>{label}</span>
+                                  {pago.tipo === 'MENSUAL' && pago.mesColegiatura && (
+                                    <span className="text-[9px] opacity-75 font-mono">({pago.mesColegiatura.slice(0, 3)})</span>
+                                  )}
+                                </span>
+
+                                {pago.estado === 'Confirmado' && (
+                                  <span className="text-[10px] font-mono text-emerald-400/90 font-medium pl-0.5">
+                                    {formattedDate || 'Fecha N/A'}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+
                           return (
                             <div className="flex flex-col items-start gap-1">
                               <button
@@ -1929,13 +1975,23 @@ export default function AdminDashboardPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="p-3.5">{renderStatusBadgeCell(inscripcionPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(techPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(materialPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(escolarPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(knotionPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(lyproPago)}</td>
-                            <td className="p-3.5">{renderStatusBadgeCell(colegiaturaPago)}</td>
+                            {isSupervisor ? (
+                              <>
+                                <td className="p-3.5">{renderStatusBadgeCell(knotionPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(techPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(lyproPago)}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="p-3.5">{renderStatusBadgeCell(inscripcionPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(techPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(materialPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(escolarPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(knotionPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(lyproPago)}</td>
+                                <td className="p-3.5">{renderStatusBadgeCell(colegiaturaPago)}</td>
+                              </>
+                            )}
                           </tr>
                         );
                       })
@@ -2016,15 +2072,20 @@ export default function AdminDashboardPage() {
                             className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
                               u.role === 'ADMIN'
                                 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                                : u.role === 'SUPERVISOR'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                                 : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                             }`}
                           >
-                            {u.role === 'ADMIN' ? 'AD' : u.nombre.charAt(0)}
+                            {u.role === 'ADMIN' ? 'AD' : u.role === 'SUPERVISOR' ? 'SP' : u.nombre.charAt(0)}
                           </div>
                           <div>
                             <div>{u.nombre}</div>
                             {u.role === 'ADMIN' && (
                               <span className="text-[10px] font-bold text-indigo-400">ADMINISTRADOR</span>
+                            )}
+                            {u.role === 'SUPERVISOR' && (
+                              <span className="text-[10px] font-bold text-amber-400">SUPERVISOR</span>
                             )}
                           </div>
                         </td>
@@ -2034,7 +2095,7 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="p-3.5 font-medium text-slate-200">{u.nivelEscolar}</td>
                         <td className="p-3.5 text-slate-300">
-                          {u.nivelEscolar === 'No aplica' ? (
+                          {u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' ? (
                             <span className="text-slate-500 italic">No aplica</span>
                           ) : (
                             <span>
@@ -2371,6 +2432,7 @@ export default function AdminDashboardPage() {
                   <option value="Preparatoria">Preparatoria (10º a 12º)</option>
                   <option value="Egresados">Egresados</option>
                   <option value="No aplica">No aplica (Admin)</option>
+                  <option value="No aplica (Supervisor)">No aplica (Supervisor)</option>
                 </select>
               </div>
 
@@ -2381,20 +2443,20 @@ export default function AdminDashboardPage() {
                     <label className="font-semibold text-slate-300 uppercase tracking-wider">
                       Grado
                     </label>
-                    {formData.nivelEscolar !== 'No aplica' && (
+                    {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
                       <span className="text-[10px] text-slate-400">Sugerencias</span>
                     )}
                   </div>
                   <input
                     type="text"
                     value={formData.grado}
-                    disabled={formData.nivelEscolar === 'No aplica'}
+                    disabled={formData.nivelEscolar === 'No aplica' || formData.nivelEscolar === 'No aplica (Supervisor)'}
                     onChange={(e) => setFormData({ ...formData, grado: e.target.value })}
                     placeholder="Ej. 1"
                     className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   />
                   {/* Quick Grade Suggestions */}
-                  {formData.nivelEscolar !== 'No aplica' && (
+                  {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {formData.nivelEscolar === 'Pre - Maternal' && (
                         <button type="button" onClick={() => setFormData({ ...formData, grado: 'N1' })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">N1</button>
@@ -2426,19 +2488,19 @@ export default function AdminDashboardPage() {
                     <label className="font-semibold text-slate-300 uppercase tracking-wider">
                       Grupo
                     </label>
-                    {formData.nivelEscolar !== 'No aplica' && (
+                    {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
                       <span className="text-[10px] text-slate-400">Letras</span>
                     )}
                   </div>
                   <input
                     type="text"
                     value={formData.grupo}
-                    disabled={formData.nivelEscolar === 'No aplica'}
+                    disabled={formData.nivelEscolar === 'No aplica' || formData.nivelEscolar === 'No aplica (Supervisor)'}
                     onChange={(e) => setFormData({ ...formData, grupo: e.target.value })}
                     placeholder="Ej. A"
                     className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   />
-                  {formData.nivelEscolar !== 'No aplica' && (
+                  {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {['A', 'B', 'C', 'D', 'E'].map(grp => (
                         <button key={grp} type="button" onClick={() => setFormData({ ...formData, grupo: grp })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{grp}</button>

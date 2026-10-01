@@ -14,7 +14,7 @@ const userCreateSchema = z.object({
   grado: z.string().nullable().optional(),
   grupo: z.string().nullable().optional(),
   estado: z.enum(['Alta', 'Baja']).default('Alta'),
-  role: z.enum(['ADMIN', 'ALUMNO']).optional(),
+  role: z.enum(['ADMIN', 'ALUMNO', 'SUPERVISOR']).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const payload = await verifySessionToken(token);
-  if (!payload || payload.role !== 'ADMIN') {
+  if (!payload || (payload.role !== 'ADMIN' && payload.role !== 'SUPERVISOR')) {
     return NextResponse.json({ error: 'Acceso no permitido' }, { status: 403 });
   }
 
@@ -71,8 +71,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isNoAplica = data.nivelEscolar === 'No aplica';
-    const computedRole = data.role || (isNoAplica ? 'ADMIN' : 'ALUMNO');
+    const isSupervisor = data.nivelEscolar === 'No aplica (Supervisor)' || data.role === 'SUPERVISOR';
+    const isNoAplica = data.nivelEscolar === 'No aplica' || isSupervisor;
+    const computedRole = data.role || (isSupervisor ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : 'ALUMNO');
     const finalGrado = isNoAplica ? null : data.grado ? data.grado.trim() : null;
     const finalGrupo = isNoAplica ? null : data.grupo ? data.grupo.trim() : null;
 

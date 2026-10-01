@@ -45,7 +45,7 @@ export default function LoginPage() {
       }
 
       // Fast transition based on role (replace to avoid back button going to login)
-      if (data.user?.role === 'ADMIN') {
+      if (data.user?.role === 'ADMIN' || data.user?.role === 'SUPERVISOR') {
         router.replace('/admin');
       } else {
         router.replace('/alumno/dashboard');

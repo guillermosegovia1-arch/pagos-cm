@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
     if (!session) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    if (session.role !== 'ADMIN') {
+    if (session.role !== 'ADMIN' && session.role !== 'SUPERVISOR') {
       return NextResponse.redirect(new URL('/alumno/dashboard', request.url));
     }
   }
@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
     if (!session) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    if (session.role === 'ADMIN') {
+    if (session.role === 'ADMIN' || session.role === 'SUPERVISOR') {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
   }
@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
   // Login or root page redirect if already logged in
   if (pathname === '/login' || pathname === '/') {
     if (session) {
-      if (session.role === 'ADMIN') {
+      if (session.role === 'ADMIN' || session.role === 'SUPERVISOR') {
         return NextResponse.redirect(new URL('/admin', request.url));
       } else {
         return NextResponse.redirect(new URL('/alumno/dashboard', request.url));

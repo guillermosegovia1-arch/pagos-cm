@@ -27,7 +27,9 @@ import {
   Youtube,
   Bell,
   CheckCheck,
+  Trash2,
 } from 'lucide-react';
+import { getConceptosForNivel } from '@/lib/concepts';
 
 interface Notificacion {
   id: string;
@@ -491,6 +493,23 @@ const DueDatesPanel: React.FC<{
     },
   ];
 
+  const nivelConcepts = getConceptosForNivel(nivel);
+  const visibleItems = items.filter((item) =>
+    nivelConcepts.some((nc) =>
+      nc.concepto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .includes(
+          item.keyword
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+        )
+    )
+  );
+  const itemsToRender = visibleItems.length > 0 ? visibleItems : items;
+
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
       <div className="flex items-center gap-2">
@@ -504,7 +523,7 @@ const DueDatesPanel: React.FC<{
       </div>
 
       <div className="space-y-2">
-        {items.map((item) => (
+        {itemsToRender.map((item) => (
           <button
             key={item.concepto}
             type="button"
@@ -696,6 +715,17 @@ export default function StudentDashboardPage() {
 
   // Notificaciones
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
+  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('pagos_cm_deleted_notifs');
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [lastSeenTs, setLastSeenTs] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -704,7 +734,11 @@ export default function StudentDashboardPage() {
     return '1970-01-01T00:00:00.000Z';
   });
 
-  const unreadCount = notificaciones.filter(
+  const visibleNotificaciones = notificaciones.filter(
+    (n) => !deletedNotifIds.includes(n.id)
+  );
+
+  const unreadCount = visibleNotificaciones.filter(
     (n) => new Date(n.fechaActualizacion) > new Date(lastSeenTs)
   ).length;
 
@@ -719,6 +753,25 @@ export default function StudentDashboardPage() {
   const openNotifPanel = () => {
     setShowNotifPanel(true);
     markAllRead();
+  };
+
+  const handleDeleteNotification = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = [...deletedNotifIds, id];
+    setDeletedNotifIds(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pagos_cm_deleted_notifs', JSON.stringify(next));
+    }
+  };
+
+  const handleClearAllNotifications = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const allIds = notificaciones.map((n) => n.id);
+    const next = Array.from(new Set([...deletedNotifIds, ...allIds]));
+    setDeletedNotifIds(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pagos_cm_deleted_notifs', JSON.stringify(next));
+    }
   };
 
   const fetchDashboard = async () => {
@@ -916,18 +969,22 @@ export default function StudentDashboardPage() {
                       <div className="flex items-center gap-2">
                         <Bell className="w-4 h-4 text-cyan-400" />
                         <span className="text-sm font-bold text-white">Notificaciones</span>
-                        {notificaciones.length > 0 && (
+                        {visibleNotificaciones.length > 0 && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400 font-mono">
-                            {notificaciones.length}
+                            {visibleNotificaciones.length}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {unreadCount === 0 && notificaciones.length > 0 && (
-                          <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                            <CheckCheck className="w-3 h-3" />
-                            Todo leído
-                          </span>
+                        {visibleNotificaciones.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllNotifications}
+                            className="text-[11px] font-semibold text-slate-400 hover:text-red-400 transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
+                            title="Eliminar todas las notificaciones"
+                          >
+                            Limpiar todo
+                          </button>
                         )}
                         <button
                           onClick={() => setShowNotifPanel(false)}
@@ -940,7 +997,7 @@ export default function StudentDashboardPage() {
 
                     {/* List */}
                     <div className="max-h-[420px] overflow-y-auto">
-                      {notificaciones.length === 0 ? (
+                      {visibleNotificaciones.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
                           <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center">
                             <Bell className="w-6 h-6 text-slate-500" />
@@ -950,7 +1007,7 @@ export default function StudentDashboardPage() {
                         </div>
                       ) : (
                         <div className="divide-y divide-slate-800/80">
-                          {notificaciones.map((notif) => {
+                          {visibleNotificaciones.map((notif) => {
                             const isNew = new Date(notif.fechaActualizacion) > new Date(lastSeenTs);
                             const fecha = new Date(notif.fechaActualizacion);
                             const fechaStr = fecha.toLocaleDateString('es-MX', {
@@ -975,13 +1032,12 @@ export default function StudentDashboardPage() {
                                 : Clock;
 
                             return (
-                              <button
+                              <div
                                 key={notif.id}
-                                type="button"
-                                onClick={() => handleNotificationClick(notif)}
                                 className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer group hover:bg-slate-800/60 ${
                                   isNew ? 'bg-cyan-500/5' : ''
                                 }`}
+                                onClick={() => handleNotificationClick(notif)}
                               >
                                 <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 mt-0.5 ${iconColor}`}>
                                   <Icon className="w-4 h-4" />
@@ -995,6 +1051,14 @@ export default function StudentDashboardPage() {
                                       {isNew && (
                                         <span className="w-2 h-2 rounded-full bg-cyan-400" />
                                       )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteNotification(notif.id, e)}
+                                        className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                                        title="Eliminar esta notificación"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
                                       <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
                                     </div>
                                   </div>
@@ -1008,7 +1072,7 @@ export default function StudentDashboardPage() {
                                     </span>
                                   </div>
                                 </div>
-                              </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -1563,12 +1627,6 @@ export default function StudentDashboardPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {isConfirmed && (
-                            <span className="text-[11px] font-semibold text-emerald-300/80 bg-emerald-500/15 px-3 py-1.5 rounded-xl border border-emerald-500/30 flex items-center gap-1.5 cursor-not-allowed select-none">
-                              <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-                              Inhabilitado
-                            </span>
-                          )}
                           {isClarification && (
                             <button
                               onClick={() => openClarifyModal(pago)}

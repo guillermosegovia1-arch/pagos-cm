@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const payload = await verifySessionToken(token);
-  if (!payload || payload.role !== 'ADMIN') {
+  if (!payload || (payload.role !== 'ADMIN' && payload.role !== 'SUPERVISOR')) {
     return NextResponse.json({ error: 'Acceso no permitido' }, { status: 403 });
   }
 
