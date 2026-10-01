@@ -64,8 +64,8 @@ export async function PUT(
       }
     }
 
-    const isSupervisor = data.nivelEscolar === 'No aplica (Supervisor)';
-    const isNoAplica = data.nivelEscolar === 'No aplica' || isSupervisor;
+    const isSupervisor = data.nivelEscolar ? data.nivelEscolar.toLowerCase().includes('supervisor') : false;
+    const isNoAplica = data.nivelEscolar ? (data.nivelEscolar.toLowerCase().includes('no aplica') || isSupervisor) : false;
     const computedRole = isSupervisor ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : (existingUser.role === 'ADMIN' || existingUser.role === 'SUPERVISOR') ? 'ALUMNO' : existingUser.role;
     const finalGrado = isNoAplica ? null : data.grado ? data.grado.trim() : null;
     const finalGrupo = isNoAplica ? null : data.grupo ? data.grupo.trim() : null;

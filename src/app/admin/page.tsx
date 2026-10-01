@@ -105,6 +105,18 @@ function getDiasRestantesNuevoIngreso(createdAtStr?: string): number {
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
+function isNoAplicaNivel(nivel?: string | null): boolean {
+  if (!nivel) return false;
+  const n = nivel.trim().toLowerCase();
+  return n.includes('no aplica');
+}
+
+function isSupervisorNivel(nivel?: string | null): boolean {
+  if (!nivel) return false;
+  const n = nivel.trim().toLowerCase();
+  return n.includes('supervisor');
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [users, setUsers] = useState<UserStudent[]>([]);
@@ -535,7 +547,7 @@ export default function AdminDashboardPage() {
     const map = new Map<string, number>();
 
     // Administración as mandatory first tab
-    const adminCount = users.filter((u) => u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' || u.role === 'ADMIN' || u.role === 'SUPERVISOR').length;
+    const adminCount = users.filter((u) => isNoAplicaNivel(u.nivelEscolar) || u.role === 'ADMIN' || u.role === 'SUPERVISOR').length;
     map.set('Administración', adminCount);
 
     // Egresados tab
@@ -546,7 +558,7 @@ export default function AdminDashboardPage() {
 
     // Dynamic groups detected from users/Excel
     users.forEach((u) => {
-      if (u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' || u.role === 'ADMIN' || u.role === 'SUPERVISOR') return;
+      if (isNoAplicaNivel(u.nivelEscolar) || u.role === 'ADMIN' || u.role === 'SUPERVISOR') return;
       if (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados') return;
 
       // If status filter is active, check if student has matching pagos
@@ -660,7 +672,7 @@ export default function AdminDashboardPage() {
     return users.filter((u) => {
       // Group filter (Strict matching)
       let groupKey = 'Sin Grupo';
-      if (u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' || u.role === 'ADMIN' || u.role === 'SUPERVISOR') {
+      if (isNoAplicaNivel(u.nivelEscolar) || u.role === 'ADMIN' || u.role === 'SUPERVISOR') {
         groupKey = 'Administración';
       } else if (u.nivelEscolar === 'Egresados' || u.grado === 'Egresados') {
         groupKey = 'Egresados';
@@ -858,7 +870,11 @@ export default function AdminDashboardPage() {
     let initialGrado = '1';
     let initialGrupo = 'A';
 
-    if (selectedGroupTab && selectedGroupTab !== 'Administración' && selectedGroupTab !== 'Egresados') {
+    if (selectedGroupTab === 'Administración') {
+      initialNivel = 'No Aplica (Admin)';
+      initialGrado = '';
+      initialGrupo = '';
+    } else if (selectedGroupTab && selectedGroupTab !== 'Administración' && selectedGroupTab !== 'Egresados') {
       const match = selectedGroupTab.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
       if (match) {
         initialGrado = match[1];
@@ -895,11 +911,18 @@ export default function AdminDashboardPage() {
 
   const openEditUserModal = (user: UserStudent) => {
     setEditingUser(user);
+    let initialNivel = user.nivelEscolar;
+    if (user.role === 'SUPERVISOR' || isSupervisorNivel(user.nivelEscolar)) {
+      initialNivel = 'No Aplica Supervisor';
+    } else if (user.role === 'ADMIN' || isNoAplicaNivel(user.nivelEscolar)) {
+      initialNivel = 'No Aplica (Admin)';
+    }
+
     setFormData({
       nombre: user.nombre,
       usuario: user.usuario,
       password: user.passwordPlain,
-      nivelEscolar: user.nivelEscolar,
+      nivelEscolar: initialNivel,
       grado: user.grado || '',
       grupo: user.grupo || '',
       estado: user.estado,
@@ -913,7 +936,7 @@ export default function AdminDashboardPage() {
 
   const handleNivelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
-    const isNoAplica = val === 'No aplica' || val === 'No aplica (Supervisor)';
+    const isNoAplica = isNoAplicaNivel(val);
     setFormData((prev) => ({
       ...prev,
       nivelEscolar: val,
@@ -947,8 +970,9 @@ export default function AdminDashboardPage() {
       const isEdit = !!editingUser;
       const url = isEdit ? `/api/admin/students/${editingUser.id}` : '/api/admin/students';
       const method = isEdit ? 'PUT' : 'POST';
-      const isSupervisorNivel = formData.nivelEscolar === 'No aplica (Supervisor)';
-      const isNoAplica = formData.nivelEscolar === 'No aplica' || isSupervisorNivel;
+      const isSupervisor = isSupervisorNivel(formData.nivelEscolar);
+      const isNoAplica = isNoAplicaNivel(formData.nivelEscolar);
+      const computedRole = isSupervisor ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : 'ALUMNO';
 
       const res = await fetch(url, {
         method,
@@ -961,7 +985,7 @@ export default function AdminDashboardPage() {
           grado: isNoAplica ? null : formData.grado,
           grupo: isNoAplica ? null : formData.grupo,
           estado: formData.estado,
-          role: isSupervisorNivel ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : 'ALUMNO',
+          role: computedRole,
         }),
       });
 
@@ -2200,7 +2224,7 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="p-3.5 font-medium text-slate-200">{u.nivelEscolar}</td>
                         <td className="p-3.5 text-slate-300">
-                          {u.nivelEscolar === 'No aplica' || u.nivelEscolar === 'No aplica (Supervisor)' ? (
+                          {isNoAplicaNivel(u.nivelEscolar) || u.role === 'ADMIN' || u.role === 'SUPERVISOR' ? (
                             <span className="text-slate-500 italic">No aplica</span>
                           ) : (
                             <span>
@@ -2469,55 +2493,124 @@ export default function AdminDashboardPage() {
                 )}
               </div>
 
-              {/* Quick Group Assignment Selector */}
-              {formData.nivelEscolar !== 'No aplica' && (
-                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
-                  <label className="block font-semibold text-emerald-400 uppercase tracking-wider text-[11px] flex items-center justify-between">
-                    <span>Asignar a Pestaña de Grupo Existente</span>
-                    <span className="text-[10px] text-slate-500 font-normal">Auto-asigna grado y grupo</span>
-                  </label>
-                  <select
-                    value={
-                      groupTabsMap.some(([name]) => name === `${formData.grado}${formData.grupo}`)
-                        ? `${formData.grado}${formData.grupo}`
-                        : ''
+              {/* Modal Tabs: Alumno / Pestaña Administración */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isNoAplicaNivel(formData.nivelEscolar)) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        nivelEscolar: 'Primaria',
+                        grado: '1',
+                        grupo: 'A',
+                      }));
                     }
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (!val) return;
-                      const match = val.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
-                      if (match) {
-                        const g = match[1];
-                        const gr = match[2];
-                        let lvl = formData.nivelEscolar;
-                        const gUpper = g.toUpperCase();
-                        if (gUpper === 'N1') lvl = 'Pre - Maternal';
-                        else if (gUpper === 'N2') lvl = 'Maternal';
-                        else if (['K1', 'K2', 'K3'].includes(gUpper)) lvl = 'Kinder';
-                        else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) lvl = 'Primaria';
-                        else if (['7', '8', '9'].includes(gUpper)) lvl = 'Secundaria';
-                        else if (['10', '11', '12'].includes(gUpper)) lvl = 'Preparatoria';
-                        setFormData((prev) => ({
-                          ...prev,
-                          nivelEscolar: lvl,
-                          grado: g,
-                          grupo: gr,
-                        }));
-                      }
-                    }}
-                    className="w-full p-2.5 bg-slate-900 border border-emerald-500/30 rounded-lg text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold cursor-pointer"
-                  >
-                    <option value="">-- Seleccionar grupo existente --</option>
-                    {groupTabsMap
-                      .filter(([name]) => name !== 'Administración' && name !== 'Egresados')
-                      .map(([name, count]) => (
-                        <option key={name} value={name}>
-                          Grupo {name} ({count} alumnos)
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              )}
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    !isNoAplicaNivel(formData.nivelEscolar)
+                      ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Alumno</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isNoAplicaNivel(formData.nivelEscolar)) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        nivelEscolar: 'No Aplica (Admin)',
+                        grado: '',
+                        grupo: '',
+                      }));
+                    }
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    isNoAplicaNivel(formData.nivelEscolar)
+                      ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Pestaña Administración</span>
+                </button>
+              </div>
+
+              {/* Quick Group Assignment Selector */}
+              <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
+                <label className="block font-semibold text-emerald-400 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                  <span>Asignar a Pestaña de Grupo</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Auto-asigna nivel, grado y grupo</span>
+                </label>
+                <select
+                  value={
+                    isNoAplicaNivel(formData.nivelEscolar)
+                      ? 'Administración'
+                      : groupTabsMap.some(([name]) => name === `${formData.grado}${formData.grupo}`)
+                      ? `${formData.grado}${formData.grupo}`
+                      : ''
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    if (val === 'Administración') {
+                      setFormData((prev) => ({
+                        ...prev,
+                        nivelEscolar: isSupervisorNivel(prev.nivelEscolar)
+                          ? 'No Aplica Supervisor'
+                          : 'No Aplica (Admin)',
+                        grado: '',
+                        grupo: '',
+                      }));
+                      return;
+                    }
+                    if (val === 'Egresados') {
+                      setFormData((prev) => ({
+                        ...prev,
+                        nivelEscolar: 'Egresados',
+                        grado: '12',
+                        grupo: 'A',
+                      }));
+                      return;
+                    }
+                    const match = val.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
+                    if (match) {
+                      const g = match[1];
+                      const gr = match[2];
+                      let lvl = formData.nivelEscolar;
+                      const gUpper = g.toUpperCase();
+                      if (gUpper === 'N1') lvl = 'Pre - Maternal';
+                      else if (gUpper === 'N2') lvl = 'Maternal';
+                      else if (['K1', 'K2', 'K3'].includes(gUpper)) lvl = 'Kinder';
+                      else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) lvl = 'Primaria';
+                      else if (['7', '8', '9'].includes(gUpper)) lvl = 'Secundaria';
+                      else if (['10', '11', '12'].includes(gUpper)) lvl = 'Preparatoria';
+                      setFormData((prev) => ({
+                        ...prev,
+                        nivelEscolar: lvl,
+                        grado: g,
+                        grupo: gr,
+                      }));
+                    }
+                  }}
+                  className="w-full p-2.5 bg-slate-900 border border-emerald-500/30 rounded-lg text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold cursor-pointer"
+                >
+                  <option value="">-- Seleccionar pestaña de grupo --</option>
+                  <option value="Administración">Pestaña Administración (Admin / Supervisor)</option>
+                  {groupTabsMap
+                    .filter(([name]) => name !== 'Administración' && name !== 'Egresados')
+                    .map(([name, count]) => (
+                      <option key={name} value={name}>
+                        Grupo {name} ({count} alumnos)
+                      </option>
+                    ))}
+                  <option value="Egresados">Pestaña Egresados</option>
+                </select>
+              </div>
 
               {/* Nivel Escolar dropdown with "No aplica" */}
               <div>
@@ -2525,19 +2618,29 @@ export default function AdminDashboardPage() {
                   Nivel Escolar Asignado
                 </label>
                 <select
-                  value={formData.nivelEscolar}
+                  value={
+                    formData.nivelEscolar === 'No aplica'
+                      ? 'No Aplica (Admin)'
+                      : formData.nivelEscolar === 'No aplica (Supervisor)'
+                      ? 'No Aplica Supervisor'
+                      : formData.nivelEscolar
+                  }
                   onChange={handleNivelChange}
-                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm font-semibold"
                 >
-                  <option value="Pre - Maternal">Pre - Maternal (N1)</option>
-                  <option value="Maternal">Maternal (N2)</option>
-                  <option value="Kinder">Kinder (K1, K2, K3)</option>
-                  <option value="Primaria">Primaria (1º a 6º)</option>
-                  <option value="Secundaria">Secundaria (7º a 9º)</option>
-                  <option value="Preparatoria">Preparatoria (10º a 12º)</option>
-                  <option value="Egresados">Egresados</option>
-                  <option value="No aplica">No aplica (Admin)</option>
-                  <option value="No aplica (Supervisor)">No aplica (Supervisor)</option>
+                  <optgroup label="Pestaña Administración">
+                    <option value="No Aplica (Admin)">No Aplica (Admin)</option>
+                    <option value="No Aplica Supervisor">No Aplica Supervisor</option>
+                  </optgroup>
+                  <optgroup label="Niveles Escolares (Alumnos)">
+                    <option value="Pre - Maternal">Pre - Maternal (N1)</option>
+                    <option value="Maternal">Maternal (N2)</option>
+                    <option value="Kinder">Kinder (K1, K2, K3)</option>
+                    <option value="Primaria">Primaria (1º a 6º)</option>
+                    <option value="Secundaria">Secundaria (7º a 9º)</option>
+                    <option value="Preparatoria">Preparatoria (10º a 12º)</option>
+                    <option value="Egresados">Egresados</option>
+                  </optgroup>
                 </select>
               </div>
 
@@ -2548,20 +2651,20 @@ export default function AdminDashboardPage() {
                     <label className="font-semibold text-slate-300 uppercase tracking-wider">
                       Grado
                     </label>
-                    {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
+                    {!isNoAplicaNivel(formData.nivelEscolar) && (
                       <span className="text-[10px] text-slate-400">Sugerencias</span>
                     )}
                   </div>
                   <input
                     type="text"
-                    value={formData.grado}
-                    disabled={formData.nivelEscolar === 'No aplica' || formData.nivelEscolar === 'No aplica (Supervisor)'}
+                    value={isNoAplicaNivel(formData.nivelEscolar) ? (isSupervisorNivel(formData.nivelEscolar) ? 'N/A (Supervisor)' : 'N/A (Admin)') : formData.grado}
+                    disabled={isNoAplicaNivel(formData.nivelEscolar)}
                     onChange={(e) => setFormData({ ...formData, grado: e.target.value })}
                     placeholder="Ej. 1"
-                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   />
                   {/* Quick Grade Suggestions */}
-                  {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
+                  {!isNoAplicaNivel(formData.nivelEscolar) && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {formData.nivelEscolar === 'Pre - Maternal' && (
                         <button type="button" onClick={() => setFormData({ ...formData, grado: 'N1' })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">N1</button>
@@ -2593,19 +2696,19 @@ export default function AdminDashboardPage() {
                     <label className="font-semibold text-slate-300 uppercase tracking-wider">
                       Grupo
                     </label>
-                    {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
+                    {!isNoAplicaNivel(formData.nivelEscolar) && (
                       <span className="text-[10px] text-slate-400">Letras</span>
                     )}
                   </div>
                   <input
                     type="text"
-                    value={formData.grupo}
-                    disabled={formData.nivelEscolar === 'No aplica' || formData.nivelEscolar === 'No aplica (Supervisor)'}
+                    value={isNoAplicaNivel(formData.nivelEscolar) ? (isSupervisorNivel(formData.nivelEscolar) ? 'N/A (Supervisor)' : 'N/A (Admin)') : formData.grupo}
+                    disabled={isNoAplicaNivel(formData.nivelEscolar)}
                     onChange={(e) => setFormData({ ...formData, grupo: e.target.value })}
                     placeholder="Ej. A"
-                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   />
-                  {formData.nivelEscolar !== 'No aplica' && formData.nivelEscolar !== 'No aplica (Supervisor)' && (
+                  {!isNoAplicaNivel(formData.nivelEscolar) && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {['A', 'B', 'C', 'D', 'E'].map(grp => (
                         <button key={grp} type="button" onClick={() => setFormData({ ...formData, grupo: grp })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-mono">{grp}</button>
