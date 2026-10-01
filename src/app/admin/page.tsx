@@ -38,6 +38,8 @@ import {
   BookOpen,
   Compass,
   UserPlus,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface Pago {
@@ -127,6 +129,7 @@ export default function AdminDashboardPage() {
   // Default selected group tab is 'Administración' (Sin 'TODOS')
   const [selectedGroupTab, setSelectedGroupTab] = useState<string>('Administración');
   const [searchQuery, setSearchQuery] = useState('');
+  const matrixSectionRef = React.useRef<HTMLDivElement>(null);
 
   // Date Range Filter state for "Reporte de alumnos que pagaron por fecha"
   const todayStr = new Date().toISOString().split('T')[0];
@@ -655,6 +658,33 @@ export default function AdminDashboardPage() {
       })
       .filter((level) => level.groups.length > 0);
   }, [groupTabsMap]);
+
+  // Lista plana y ordenada de todos los grupos disponibles
+  const flatGroupList = useMemo(() => {
+    const list = leveledGroupTabs.flatMap((lvl) => lvl.groups.map(([name]) => name));
+    if (list.length === 0) {
+      return groupTabsMap.map(([name]) => name);
+    }
+    return list;
+  }, [leveledGroupTabs, groupTabsMap]);
+
+  const currentGroupIndex = flatGroupList.indexOf(selectedGroupTab);
+  const prevGroup = currentGroupIndex > 0 ? flatGroupList[currentGroupIndex - 1] : null;
+  const nextGroup =
+    currentGroupIndex >= 0 && currentGroupIndex < flatGroupList.length - 1
+      ? flatGroupList[currentGroupIndex + 1]
+      : null;
+
+  // Cambiar grupo y desplazarse suavemente al inicio de la sección Matriz de Pagos
+  const handleNavigateGroup = (targetGroupName: string) => {
+    if (!targetGroupName) return;
+    setSelectedGroupTab(targetGroupName);
+    setTimeout(() => {
+      if (matrixSectionRef.current) {
+        matrixSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
 
   // Set default group tab if current selected group is not in list
   useEffect(() => {
@@ -1812,19 +1842,75 @@ export default function AdminDashboardPage() {
 
         {/* SECTION A: PANEL DE VERIFICACIÓN DE PAGOS */}
         {activeTabSection === 'verificacion' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
-                  <span>Matriz de Pagos por Grupo</span>
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Grupo seleccionado: <strong className="text-cyan-400">{selectedGroupTab}</strong>
-                </p>
+          <div
+            ref={matrixSectionRef}
+            id="seccion-matriz-pagos"
+            className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl scroll-mt-6"
+          >
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Matriz de Pagos por Grupo</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Grupo seleccionado: <strong className="text-cyan-400">{selectedGroupTab}</strong>
+                  </p>
+                </div>
               </div>
-              <div className="text-xs text-slate-400">
-                Mostrando <strong className="text-cyan-400">{filteredUsers.filter(u => u.role === 'ALUMNO').length}</strong> alumnos
+
+              {/* Flechas de Navegación de Grupo Superiores */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => prevGroup && handleNavigateGroup(prevGroup)}
+                    disabled={!prevGroup}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                      prevGroup
+                        ? 'bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 cursor-pointer shadow active:scale-95'
+                        : 'text-slate-600 opacity-30 cursor-not-allowed'
+                    }`}
+                    title={prevGroup ? `Ir al grupo anterior: ${prevGroup}` : 'Primer grupo alcanzado'}
+                  >
+                    <ChevronLeft className="w-4 h-4 shrink-0" />
+                    <span className="hidden sm:inline">Anterior</span>
+                  </button>
+
+                  <div className="px-3 py-0.5 text-center flex flex-col items-center justify-center min-w-[120px] max-w-[190px]">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      {currentGroupIndex >= 0 ? `Grupo (${currentGroupIndex + 1}/${flatGroupList.length})` : 'Grupo'}
+                    </span>
+                    <span
+                      className="text-xs sm:text-sm font-black text-cyan-400 font-mono truncate max-w-full"
+                      title={selectedGroupTab}
+                    >
+                      {selectedGroupTab}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => nextGroup && handleNavigateGroup(nextGroup)}
+                    disabled={!nextGroup}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                      nextGroup
+                        ? 'bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 cursor-pointer shadow active:scale-95'
+                        : 'text-slate-600 opacity-30 cursor-not-allowed'
+                    }`}
+                    title={nextGroup ? `Ir al siguiente grupo: ${nextGroup}` : 'Último grupo alcanzado'}
+                  >
+                    <span className="hidden sm:inline">Siguiente</span>
+                    <ChevronRight className="w-4 h-4 shrink-0" />
+                  </button>
+                </div>
+
+                <div className="text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl shrink-0">
+                  Mostrando <strong className="text-cyan-400">{filteredUsers.filter(u => u.role === 'ALUMNO').length}</strong> alumnos
+                </div>
               </div>
             </div>
 
@@ -2120,6 +2206,63 @@ export default function AdminDashboardPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Flechas de Navegación de Grupo Inferiores */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-slate-400 flex items-center gap-2">
+                <span>
+                  Grupo actual: <strong className="text-cyan-400">{selectedGroupTab}</strong>
+                </span>
+                <span className="text-slate-600">·</span>
+                <span>
+                  Mostrando <strong className="text-cyan-400">{filteredUsers.filter(u => u.role === 'ALUMNO').length}</strong> alumnos
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => prevGroup && handleNavigateGroup(prevGroup)}
+                  disabled={!prevGroup}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    prevGroup
+                      ? 'bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 cursor-pointer shadow active:scale-95'
+                      : 'text-slate-600 opacity-30 cursor-not-allowed'
+                  }`}
+                  title={prevGroup ? `Ir al grupo anterior: ${prevGroup}` : 'Primer grupo alcanzado'}
+                >
+                  <ChevronLeft className="w-4 h-4 shrink-0" />
+                  <span>Anterior {prevGroup ? `(${prevGroup})` : ''}</span>
+                </button>
+
+                <div className="px-3 py-0.5 text-center flex flex-col items-center justify-center min-w-[120px] max-w-[200px]">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    {currentGroupIndex >= 0 ? `Grupo (${currentGroupIndex + 1}/${flatGroupList.length})` : 'Grupo'}
+                  </span>
+                  <span
+                    className="text-xs sm:text-sm font-black text-cyan-400 font-mono truncate max-w-full"
+                    title={selectedGroupTab}
+                  >
+                    {selectedGroupTab}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => nextGroup && handleNavigateGroup(nextGroup)}
+                  disabled={!nextGroup}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    nextGroup
+                      ? 'bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 cursor-pointer shadow active:scale-95'
+                      : 'text-slate-600 opacity-30 cursor-not-allowed'
+                  }`}
+                  title={nextGroup ? `Ir al siguiente grupo: ${nextGroup}` : 'Último grupo alcanzado'}
+                >
+                  <span>Siguiente {nextGroup ? `(${nextGroup})` : ''}</span>
+                  <ChevronRight className="w-4 h-4 shrink-0" />
+                </button>
+              </div>
             </div>
           </div>
         )}
