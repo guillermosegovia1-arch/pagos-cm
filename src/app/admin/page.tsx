@@ -675,15 +675,10 @@ export default function AdminDashboardPage() {
       ? flatGroupList[currentGroupIndex + 1]
       : null;
 
-  // Cambiar grupo y desplazarse suavemente al inicio de la sección Matriz de Pagos
+  // Cambiar grupo de forma inmediata sin desplazar ni mover la pantalla
   const handleNavigateGroup = (targetGroupName: string) => {
     if (!targetGroupName) return;
     setSelectedGroupTab(targetGroupName);
-    setTimeout(() => {
-      if (matrixSectionRef.current) {
-        matrixSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 50);
   };
 
   // Set default group tab if current selected group is not in list
