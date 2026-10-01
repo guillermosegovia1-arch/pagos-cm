@@ -66,23 +66,24 @@ interface UserStudent {
   grado: string | null;
   grupo: string | null;
   estado: 'Alta' | 'Baja';
+  creadoEnAdmin?: boolean;
   createdAt?: string;
   updatedAt?: string;
   pagos: Pago[];
 }
 
-// 1 Mes calendario (o 30 días) para la etiqueta de Nuevo Ingreso
-function isNuevoIngreso(user: { role?: string; createdAt?: string }): boolean {
+// 1 Semana (7 días) para la etiqueta de Nuevo Ingreso, exclusivamente para registros creados desde el panel de administración
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isNuevoIngreso(user: { role?: string; createdAt?: string; creadoEnAdmin?: boolean }): boolean {
   if (user.role && user.role !== 'ALUMNO') return false;
+  if (!user.creadoEnAdmin) return false;
   if (!user.createdAt) return false;
   const created = new Date(user.createdAt);
   if (isNaN(created.getTime())) return false;
 
-  const now = new Date();
-  const oneMonthAfter = new Date(created);
-  oneMonthAfter.setMonth(oneMonthAfter.getMonth() + 1);
-
-  return now.getTime() >= created.getTime() && now.getTime() <= oneMonthAfter.getTime();
+  const diffMs = Date.now() - created.getTime();
+  return diffMs >= 0 && diffMs <= ONE_WEEK_MS;
 }
 
 function formatFechaIngreso(createdAtStr?: string): string {
@@ -99,9 +100,7 @@ function getDiasRestantesNuevoIngreso(createdAtStr?: string): number {
   if (!createdAtStr) return 0;
   const created = new Date(createdAtStr);
   if (isNaN(created.getTime())) return 0;
-  const oneMonthAfter = new Date(created);
-  oneMonthAfter.setMonth(oneMonthAfter.getMonth() + 1);
-  const diffMs = oneMonthAfter.getTime() - Date.now();
+  const diffMs = created.getTime() + ONE_WEEK_MS - Date.now();
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
@@ -815,6 +814,7 @@ export default function AdminDashboardPage() {
       fechaConfirmado: string | null;
       comentarioAdmin: string | null;
       createdAt?: string;
+      creadoEnAdmin?: boolean;
     }> = [];
 
     users
@@ -834,6 +834,7 @@ export default function AdminDashboardPage() {
               fechaConfirmado: p.fechaConfirmado,
               comentarioAdmin: p.comentarioAdmin,
               createdAt: u.createdAt,
+              creadoEnAdmin: u.creadoEnAdmin,
             });
           }
         });
@@ -1361,7 +1362,7 @@ export default function AdminDashboardPage() {
                   type="button"
                   onClick={() => setShowNuevoIngresoModal(true)}
                   className="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-5 shadow-xl relative overflow-hidden text-left transition-all hover:scale-[1.02] cursor-pointer group"
-                  title="Haz clic para ver la lista de alumnos de nuevo ingreso"
+                  title="Haz clic para ver la lista de alumnos de nuevo ingreso registrados esta semana"
                 >
                   <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all">
                     <Sparkles className="w-5 h-5 text-emerald-400" />
@@ -1373,7 +1374,7 @@ export default function AdminDashboardPage() {
                     {nuevoIngresoStudents.length}
                   </div>
                   <div className="text-[11px] text-emerald-400/80 mt-1 flex items-center gap-1 font-semibold">
-                    <span>Ver lista completa</span>
+                    <span>Última semana · Ver lista</span>
                     <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </button>
@@ -1648,7 +1649,7 @@ export default function AdminDashboardPage() {
                             <td className="p-3.5 font-bold text-slate-100">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span>{item.studentName}</span>
-                                {isNuevoIngreso({ role: 'ALUMNO', createdAt: (item as any).createdAt }) && (
+                                {isNuevoIngreso({ role: 'ALUMNO', createdAt: (item as any).createdAt, creadoEnAdmin: (item as any).creadoEnAdmin }) && (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shadow-sm shadow-emerald-500/10">
                                     <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
                                     (Nuevo Ingreso - {formatFechaIngreso((item as any).createdAt)})
@@ -3273,11 +3274,11 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-white">Alumnos de Nuevo Ingreso</h3>
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                      {nuevoIngresoStudents.length} {nuevoIngresoStudents.length === 1 ? 'Alumno' : 'Alumnos'}
+                      {nuevoIngresoStudents.length} {nuevoIngresoStudents.length === 1 ? 'Alumno esta semana' : 'Alumnos esta semana'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Alumnos registrados por el administrador durante el último mes. La etiqueta permanecerá activa durante 30 días posteriores al registro.
+                    Alumnos registrados desde el panel de administración en Gestión de Alumnos / Nuevo Alumno. La etiqueta permanece activa durante 1 semana (7 días).
                   </p>
                 </div>
               </div>
@@ -3364,7 +3365,7 @@ export default function AdminDashboardPage() {
                               )}
                               <span>•</span>
                               <span className="text-emerald-400/90 text-[11px] font-medium">
-                                {diasRestantes > 0 ? `${diasRestantes} días restantes con etiqueta` : 'Último día con etiqueta'}
+                                {diasRestantes > 0 ? `${diasRestantes} de 7 días restantes con etiqueta` : 'Último día con etiqueta'}
                               </span>
                             </div>
                           </div>

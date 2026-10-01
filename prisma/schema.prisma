@@ -19,6 +19,7 @@ model User {
   grado         String?
   grupo         String?
   estado        String   @default("Alta")
+  creadoEnAdmin Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

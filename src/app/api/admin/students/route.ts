@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
         grado: finalGrado,
         grupo: finalGrupo,
         estado: data.estado,
+        creadoEnAdmin: true,
       },
     });
 
