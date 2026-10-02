@@ -1,4 +1,6 @@
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -35,7 +37,14 @@ export async function GET(request: NextRequest) {
     orderBy: [{ nivelEscolar: 'asc' }, { grado: 'asc' }, { grupo: 'asc' }, { nombre: 'asc' }],
   });
 
-  return NextResponse.json({ users });
+  return NextResponse.json(
+    { users },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    }
+  );
 }
 
 export async function POST(request: NextRequest) {

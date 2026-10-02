@@ -745,6 +745,8 @@ export default function StudentDashboardPage() {
   const [conceptFilter, setConceptFilter] = useState<string | null>(null);
   const [cicloEscolar, setCicloEscolar] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showReportSuccessModal, setShowReportSuccessModal] = useState(false);
+  const [successReportInfo, setSuccessReportInfo] = useState<{ concepto: string; folio: string } | null>(null);
 
   // Notificaciones
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -862,9 +864,13 @@ export default function StudentDashboardPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al reportar pago');
+      const reportedFolio = confirmNumber.trim();
+      const reportedConcepto = selectedPago.concepto;
       setFeedbackMsg({ type: 'success', text: 'En Revisión: El colegio está verificando el reporte recibido. (Espere de 1 a 3 días)' });
       setShowReportModal(false);
       setConfirmNumber('');
+      setSuccessReportInfo({ concepto: reportedConcepto, folio: reportedFolio });
+      setShowReportSuccessModal(true);
       fetchDashboard();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
@@ -1871,6 +1877,54 @@ export default function StudentDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CUADRO DE DIÁLOGO DE CONFIRMACIÓN DE REPORTE */}
+      {showReportSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl text-center space-y-5 relative">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-xl font-black text-white">
+                ¡Reporte de Pago Enviado con Éxito!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed px-1">
+                Gracias por enviar su reporte de pago. Nuestro equipo administrativo revisará y validará su folio proporcionado. En un lapso de <strong className="text-emerald-400">1 a 3 días hábiles</strong> recibirá la confirmación oficial en su panel.
+              </p>
+            </div>
+
+            {successReportInfo && (
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-left text-xs space-y-2">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="font-semibold uppercase text-[10px] tracking-wider">Concepto</span>
+                  <span className="text-amber-400 font-bold text-[10px] flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                    <Clock className="w-3 h-3" /> En Revisión
+                  </span>
+                </div>
+                <p className="font-bold text-white text-sm">{successReportInfo.concepto}</p>
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <span className="text-slate-400 text-[11px]">Folio reportado:</span>
+                  <span className="font-mono font-bold text-cyan-300 bg-cyan-950/50 px-2.5 py-0.5 rounded border border-cyan-800/40 text-xs">
+                    {successReportInfo.folio}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowReportSuccessModal(false)}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-sm tracking-wide shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}

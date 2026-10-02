@@ -40,6 +40,7 @@ import {
   UserPlus,
   ChevronLeft,
   ChevronRight,
+  Bell,
 } from 'lucide-react';
 
 interface Pago {
@@ -54,8 +55,21 @@ interface Pago {
   notaConcepto?: string | null;
   mesColegiatura?: string | null;
   fechaVencimiento?: string | null;
+  fechaReportado?: string | null;
   fechaConfirmado: string | null;
   createdAt: string;
+  updatedAt?: string;
+}
+
+interface AdminNotification {
+  id: string;
+  pagoId: string;
+  pago: Pago;
+  user: UserStudent;
+  titulo: string;
+  mensaje: string;
+  tipo: 'confirmado' | 'revision' | 'aclaracion';
+  fecha: string;
 }
 
 interface UserStudent {
@@ -217,9 +231,34 @@ export default function AdminDashboardPage() {
   }>({ nivelEscolar: 'Primaria', grado: '1', grupo: 'A' });
   const [addingGroup, setAddingGroup] = useState(false);
 
+  // Notificaciones del Administrador (Reportes de pago enviados por los alumnos)
+  const [showAdminNotifPanel, setShowAdminNotifPanel] = useState(false);
+  const [adminDeletedNotifIds, setAdminDeletedNotifIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('pagos_cm_admin_deleted_notifs');
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [adminLastSeenTs, setAdminLastSeenTs] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pagos_cm_admin_notif_seen') || '1970-01-01T00:00:00.000Z';
+    }
+    return '1970-01-01T00:00:00.000Z';
+  });
+
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/admin/students');
+      const res = await fetch(`/api/admin/students?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      });
       if (res.status === 401 || res.status === 403) {
         router.push('/login');
         return;
@@ -1080,10 +1119,48 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     if (!editingPago) return;
 
+    const previousUsers = users;
+    const pagoId = editingPago.id;
+    const pagoConcepto = editingPago.concepto;
+
+    // Calcular fecha de confirmación
+    const calculatedFechaConfirmado =
+      pagoStatus === 'Confirmado'
+        ? (customFechaConfirmado
+            ? new Date(`${customFechaConfirmado.trim()}T12:00:00`).toISOString()
+            : new Date().toISOString())
+        : null;
+
+    const optimisticPago: Pago = {
+      ...editingPago,
+      estado: pagoStatus,
+      motivoAclaracion: pagoStatus === 'Requiere Aclaración' ? motivoAclaracion : null,
+      comentarioAdmin: comentarioAdmin.trim() || null,
+      notaConcepto: notaConcepto.trim() || null,
+      fechaVencimiento: fechaVencimiento ? new Date(`${fechaVencimiento}T12:00:00`).toISOString() : null,
+      fechaConfirmado: calculatedFechaConfirmado,
+    };
+
+    // 1. Guardado y actualización visual INMEDIATA en React state (sin demora ni espera de red)
+    setUsers((prevUsers) =>
+      prevUsers.map((u) => ({
+        ...u,
+        pagos: u.pagos.map((p) => (p.id === pagoId ? optimisticPago : p)),
+      }))
+    );
+
+    // 2. Cerrar el modal de inmediato
+    setShowPaymentModal(false);
+
+    setFeedback({
+      type: 'success',
+      text: `Estatus del concepto "${pagoConcepto}" actualizado a "${pagoStatus}" guardado correctamente.`,
+    });
+
     setSavingUser(true);
 
     try {
-      const res = await fetch(`/api/admin/payments/${editingPago.id}`, {
+      const res = await fetch(`/api/admin/payments/${pagoId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1102,18 +1179,151 @@ export default function AdminDashboardPage() {
         throw new Error(data.error || 'Error al actualizar pago');
       }
 
-      setFeedback({
-        type: 'success',
-        text: `Estatus, notas y vencimiento del concepto "${editingPago.concepto}" guardados correctamente.`,
-      });
+      if (data.pago) {
+        setUsers((prevUsers) =>
+          prevUsers.map((u) => ({
+            ...u,
+            pagos: u.pagos.map((p) => (p.id === data.pago.id ? { ...p, ...data.pago } : p)),
+          }))
+        );
+      }
 
-      setShowPaymentModal(false);
+      // Re-sincronizar con el servidor en segundo plano
       fetchUsers();
     } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message });
+      // Revertir a la versión anterior en caso de error
+      setUsers(previousUsers);
+      setFeedback({ type: 'error', text: `Error al guardar: ${err.message}` });
     } finally {
       setSavingUser(false);
     }
+  };
+
+  // Notificaciones derivadas para el Administrador (Reportes de alumnos)
+  const adminNotificaciones = useMemo<AdminNotification[]>(() => {
+    const list: AdminNotification[] = [];
+
+    users.forEach((u) => {
+      if (u.role && u.role !== 'ALUMNO') return;
+
+      u.pagos.forEach((p) => {
+        // Incluir cualquier pago con actividad de reporte o revisión
+        if (p.estado === 'Pendiente' && !p.numeroConfirmacion && !p.respuestaAlumno) return;
+
+        let tipo: 'confirmado' | 'revision' | 'aclaracion' = 'revision';
+        let titulo = '';
+        let mensaje = '';
+
+        const groupLabel = u.grado && u.grupo ? `${u.grado}${u.grupo}` : u.nivelEscolar;
+
+        if (p.estado === 'Confirmado') {
+          tipo = 'confirmado';
+          titulo = 'Pago confirmado ✓';
+          mensaje = `Tu pago de "${p.concepto}" fue verificado y confirmado por el colegio. (${u.nombre} - ${groupLabel})`;
+        } else if (p.estado === 'En Revisión') {
+          tipo = 'revision';
+          titulo = 'Pago en revisión';
+          mensaje = p.numeroConfirmacion
+            ? `${u.nombre} (${groupLabel}) reportó folio "${p.numeroConfirmacion}" para "${p.concepto}".`
+            : `El reporte de pago de "${p.concepto}" de ${u.nombre} (${groupLabel}) está en espera de revisión.`;
+        } else if (p.estado === 'Requiere Aclaración') {
+          tipo = 'aclaracion';
+          titulo = p.respuestaAlumno ? 'Respuesta de aclaración recibida' : 'Aclaración requerida ⚠️';
+          mensaje = p.respuestaAlumno
+            ? `${u.nombre} (${groupLabel}) respondió: "${p.respuestaAlumno}" para "${p.concepto}".`
+            : `${u.nombre} (${groupLabel}) tiene aclaración pendiente en "${p.concepto}": ${p.motivoAclaracion || ''}`;
+        }
+
+        const dateStr = p.fechaReportado || p.updatedAt || p.createdAt;
+
+        list.push({
+          id: `${u.id}-${p.id}`,
+          pagoId: p.id,
+          pago: p,
+          user: u,
+          titulo,
+          mensaje,
+          tipo,
+          fecha: dateStr,
+        });
+      });
+    });
+
+    // Ordenar: primero los que están en revisión, luego por fecha más reciente
+    return list.sort((a, b) => {
+      if (a.tipo === 'revision' && b.tipo !== 'revision') return -1;
+      if (b.tipo === 'revision' && a.tipo !== 'revision') return 1;
+      return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+    });
+  }, [users]);
+
+  const visibleAdminNotificaciones = useMemo(() => {
+    return adminNotificaciones.filter((n) => !adminDeletedNotifIds.includes(n.id));
+  }, [adminNotificaciones, adminDeletedNotifIds]);
+
+  const unreadAdminCount = useMemo(() => {
+    return visibleAdminNotificaciones.filter(
+      (n) => n.tipo === 'revision' || new Date(n.fecha) > new Date(adminLastSeenTs)
+    ).length;
+  }, [visibleAdminNotificaciones, adminLastSeenTs]);
+
+  const markAllAdminRead = () => {
+    const now = new Date().toISOString();
+    setAdminLastSeenTs(now);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pagos_cm_admin_notif_seen', now);
+    }
+  };
+
+  const openAdminNotifPanel = () => {
+    setShowAdminNotifPanel((prev) => {
+      const next = !prev;
+      if (next) markAllAdminRead();
+      return next;
+    });
+  };
+
+  const handleDeleteAdminNotification = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = [...adminDeletedNotifIds, id];
+    setAdminDeletedNotifIds(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pagos_cm_admin_deleted_notifs', JSON.stringify(next));
+    }
+  };
+
+  const handleClearAllAdminNotifications = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const allIds = adminNotificaciones.map((n) => n.id);
+    const next = Array.from(new Set([...adminDeletedNotifIds, ...allIds]));
+    setAdminDeletedNotifIds(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pagos_cm_admin_deleted_notifs', JSON.stringify(next));
+    }
+  };
+
+  const handleAdminNotificationClick = (notif: AdminNotification) => {
+    setShowAdminNotifPanel(false);
+    setActiveTabSection('verificacion');
+
+    let groupKey = 'Sin Grupo';
+    if (isNoAplicaNivel(notif.user.nivelEscolar) || notif.user.role === 'ADMIN' || notif.user.role === 'SUPERVISOR') {
+      groupKey = 'Administración';
+    } else if (notif.user.nivelEscolar === 'Egresados' || notif.user.grado === 'Egresados') {
+      groupKey = 'Egresados';
+    } else if (notif.user.grado && notif.user.grupo) {
+      groupKey = `${notif.user.grado}${notif.user.grupo}`;
+    } else if (notif.user.nivelEscolar) {
+      groupKey = notif.user.nivelEscolar;
+    }
+
+    setSelectedGroupTab(groupKey);
+    setSelectedStatusFilter('TODOS');
+    setStatusDateFilter(null);
+    setSearchQuery('');
+
+    // Abrir el modal de edición de estatus inmediatamente para revisar y cambiar estatus
+    openEditPagoModal(notif.pago, notif.user.nombre);
   };
 
   // Excel Import Handler
@@ -1208,7 +1418,165 @@ export default function AdminDashboardPage() {
             </div>
           </button>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* NOTIFICACIONES DE REPORTES (IDÉNTICO A LA IMAGEN) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={openAdminNotifPanel}
+                className="relative p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Notificaciones de reportes de pago"
+              >
+                <Bell className="w-4 h-4 text-slate-300" />
+                {unreadAdminCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-[#080c14] animate-bounce">
+                    {unreadAdminCount > 9 ? '9+' : unreadAdminCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Panel Desplegable de Notificaciones */}
+              {showAdminNotifPanel && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowAdminNotifPanel(false)}
+                  />
+
+                  {/* Panel */}
+                  <div className="absolute right-0 top-11 z-50 w-80 sm:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/60">
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-bold text-white">Notificaciones</span>
+                        {visibleAdminNotificaciones.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400 font-mono">
+                            {visibleAdminNotificaciones.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {visibleAdminNotificaciones.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllAdminNotifications}
+                            className="text-[11px] font-semibold text-slate-400 hover:text-red-400 transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
+                            title="Eliminar todas las notificaciones"
+                          >
+                            Limpiar todo
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowAdminNotifPanel(false)}
+                          className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* List */}
+                    <div className="max-h-[420px] overflow-y-auto">
+                      {visibleAdminNotificaciones.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center">
+                            <Bell className="w-6 h-6 text-slate-500" />
+                          </div>
+                          <p className="text-sm text-slate-400">Sin reportes por ahora</p>
+                          <p className="text-xs text-slate-600">
+                            Cuando los alumnos reporten pagos o respondan aclaraciones, aparecerán aquí.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-800/80">
+                          {visibleAdminNotificaciones.map((notif) => {
+                            const isNew = notif.tipo === 'revision' || new Date(notif.fecha) > new Date(adminLastSeenTs);
+                            const fecha = new Date(notif.fecha);
+                            const fechaStr = !isNaN(fecha.getTime())
+                              ? fecha.toLocaleDateString('es-MX', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })
+                              : 'Fecha reciente';
+                            const horaStr = !isNaN(fecha.getTime())
+                              ? fecha.toLocaleTimeString('es-MX', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '';
+
+                            const iconColor =
+                              notif.tipo === 'confirmado'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : notif.tipo === 'aclaracion'
+                                ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                                : 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+
+                            const Icon =
+                              notif.tipo === 'confirmado'
+                                ? CheckCircle2
+                                : notif.tipo === 'aclaracion'
+                                ? AlertTriangle
+                                : Clock;
+
+                            return (
+                              <div
+                                key={notif.id}
+                                className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer group hover:bg-slate-800/60 ${
+                                  isNew ? 'bg-cyan-500/5' : ''
+                                }`}
+                                onClick={() => handleAdminNotificationClick(notif)}
+                              >
+                                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 mt-0.5 ${iconColor}`}>
+                                  <Icon className="w-4 h-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors leading-tight">
+                                      {notif.titulo}
+                                    </p>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {isNew && (
+                                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteAdminNotification(notif.id, e)}
+                                        className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                                        title="Eliminar esta notificación"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+                                    </div>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed line-clamp-2">
+                                    {notif.mensaje}
+                                  </p>
+                                  <div className="flex items-center justify-between mt-1.5 text-[10px] text-slate-500">
+                                    <span>
+                                      {fechaStr} {horaStr ? `· ${horaStr}` : ''}
+                                    </span>
+                                    <span className="text-cyan-400 font-semibold group-hover:text-cyan-300 flex items-center gap-0.5">
+                                      Revisar y cambiar estatus →
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={() => setShowLogoutModal(true)}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all cursor-pointer"

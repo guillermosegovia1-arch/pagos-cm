@@ -1,4 +1,6 @@
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -44,12 +46,15 @@ export async function PUT(
 
     const existingPago = await prisma.pago.findUnique({ where: { id } });
 
-    let finalFechaConfirmado = existingPago?.fechaConfirmado;
+    let finalFechaConfirmado: Date | null = null;
     if (estado === 'Confirmado') {
-      if (fechaConfirmado) {
-        const iso = fechaConfirmado.includes('T') ? fechaConfirmado : `${fechaConfirmado}T12:00:00`;
-        finalFechaConfirmado = new Date(iso);
-      } else if (!existingPago?.fechaConfirmado) {
+      if (fechaConfirmado && typeof fechaConfirmado === 'string' && fechaConfirmado.trim().length > 0) {
+        const iso = fechaConfirmado.includes('T') ? fechaConfirmado : `${fechaConfirmado.trim()}T12:00:00`;
+        const d = new Date(iso);
+        finalFechaConfirmado = isNaN(d.getTime()) ? new Date() : d;
+      } else if (existingPago?.fechaConfirmado) {
+        finalFechaConfirmado = existingPago.fechaConfirmado;
+      } else {
         finalFechaConfirmado = new Date();
       }
     } else {
@@ -69,7 +74,14 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json({ success: true, pago: updated });
+    return NextResponse.json(
+      { success: true, pago: updated },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      }
+    );
   } catch (error) {
     console.error('Update payment error:', error);
     return NextResponse.json(
