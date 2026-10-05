@@ -41,6 +41,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Bell,
+  Copy,
+  Check,
 } from 'lucide-react';
 import LyproQuotaDashboard from '@/components/admin/LyproQuotaDashboard';
 
@@ -159,6 +161,12 @@ export default function AdminDashboardPage() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showNuevoIngresoModal, setShowNuevoIngresoModal] = useState(false);
   const [nuevoIngresoSearch, setNuevoIngresoSearch] = useState('');
+  const [showPaidStudentsModal, setShowPaidStudentsModal] = useState(false);
+  const [paidStudentsSearch, setPaidStudentsSearch] = useState('');
+  const [copiedPaidNames, setCopiedPaidNames] = useState(false);
+  const [showBajasModal, setShowBajasModal] = useState(false);
+  const [bajasSearch, setBajasSearch] = useState('');
+  const [copiedBajasNames, setCopiedBajasNames] = useState(false);
   const [editingUser, setEditingUser] = useState<UserStudent | null>(null);
 
   // Form state for Create / Edit user
@@ -821,6 +829,58 @@ export default function AdminDashboardPage() {
         (s.grupo && s.grupo.toLowerCase().includes(q))
     );
   }, [nuevoIngresoStudents, nuevoIngresoSearch]);
+
+  // Alumnos que ya pagaron (al menos 1 concepto confirmado)
+  const paidStudentsList = useMemo(() => {
+    return users.filter(
+      (u) => u.role === 'ALUMNO' && u.pagos.some((p) => p.estado === 'Confirmado')
+    );
+  }, [users]);
+
+  const filteredPaidStudentsList = useMemo(() => {
+    if (!paidStudentsSearch.trim()) return paidStudentsList;
+    const q = paidStudentsSearch.toLowerCase().trim();
+    return paidStudentsList.filter(
+      (s) =>
+        s.nombre.toLowerCase().includes(q) ||
+        s.usuario.toLowerCase().includes(q) ||
+        s.nivelEscolar.toLowerCase().includes(q) ||
+        (s.grado && s.grado.toLowerCase().includes(q)) ||
+        (s.grupo && s.grupo.toLowerCase().includes(q))
+    );
+  }, [paidStudentsList, paidStudentsSearch]);
+
+  const handleCopyPaidNames = () => {
+    const text = filteredPaidStudentsList.map((s) => s.nombre).join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedPaidNames(true);
+    setTimeout(() => setCopiedPaidNames(false), 2000);
+  };
+
+  // Alumnos dados de baja
+  const bajasStudentsList = useMemo(() => {
+    return users.filter((u) => u.role === 'ALUMNO' && u.estado === 'Baja');
+  }, [users]);
+
+  const filteredBajasStudentsList = useMemo(() => {
+    if (!bajasSearch.trim()) return bajasStudentsList;
+    const q = bajasSearch.toLowerCase().trim();
+    return bajasStudentsList.filter(
+      (s) =>
+        s.nombre.toLowerCase().includes(q) ||
+        s.usuario.toLowerCase().includes(q) ||
+        s.nivelEscolar.toLowerCase().includes(q) ||
+        (s.grado && s.grado.toLowerCase().includes(q)) ||
+        (s.grupo && s.grupo.toLowerCase().includes(q))
+    );
+  }, [bajasStudentsList, bajasSearch]);
+
+  const handleCopyBajasNames = () => {
+    const text = filteredBajasStudentsList.map((s) => s.nombre).join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedBajasNames(true);
+    setTimeout(() => setCopiedBajasNames(false), 2000);
+  };
 
   // Metric Calculation for Dashboard
   const metrics = useMemo(() => {
@@ -1912,27 +1972,45 @@ export default function AdminDashboardPage() {
                   </div>
                 </button>
 
-                {/* Cuántos han pagado */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <CheckCircle2 className="w-5 h-5" />
+                {/* Cuántos han pagado (CLICKABLE) */}
+                <button
+                  type="button"
+                  onClick={() => setShowPaidStudentsModal(true)}
+                  className="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-5 shadow-xl relative overflow-hidden text-left transition-all hover:scale-[1.02] cursor-pointer group"
+                  title="Haz clic para ver la lista de alumnos que ya pagaron"
+                >
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                   </div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alumnos que Pagaron</div>
+                  <div className="text-xs font-bold text-slate-400 group-hover:text-emerald-300 transition-colors uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Alumnos que Pagaron</span>
+                  </div>
                   <div className="text-3xl font-extrabold text-emerald-400 mt-2">{metrics.studentsWhoPaidCount}</div>
-                  <div className="text-[11px] text-emerald-400/80 mt-1 font-semibold">
-                    {metrics.confirmedCount} conceptos confirmados en total
+                  <div className="text-[11px] text-emerald-400/80 mt-1 font-semibold flex items-center gap-1">
+                    <span>{metrics.confirmedCount} conceptos confirmados · Ver lista</span>
+                    <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                   </div>
-                </div>
+                </button>
 
-                {/* Cuántas bajas */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
-                    <UserX className="w-5 h-5" />
+                {/* Cuántas bajas (CLICKABLE) */}
+                <button
+                  type="button"
+                  onClick={() => setShowBajasModal(true)}
+                  className="bg-slate-900 border border-slate-800 hover:border-red-500/50 rounded-2xl p-5 shadow-xl relative overflow-hidden text-left transition-all hover:scale-[1.02] cursor-pointer group"
+                  title="Haz clic para ver la lista de alumnos dados de baja"
+                >
+                  <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 group-hover:bg-red-500/20 group-hover:scale-110 transition-all">
+                    <UserX className="w-5 h-5 text-red-400" />
                   </div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alumnos Dados de Baja</div>
+                  <div className="text-xs font-bold text-slate-400 group-hover:text-red-300 transition-colors uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Alumnos Dados de Baja</span>
+                  </div>
                   <div className="text-3xl font-extrabold text-red-400 mt-2">{metrics.bajasStudents}</div>
-                  <div className="text-[11px] text-slate-500 mt-1">Estatus inactivo en el colegio</div>
-                </div>
+                  <div className="text-[11px] text-red-400/80 mt-1 font-semibold flex items-center gap-1">
+                    <span>Estatus inactivo en el colegio · Ver lista</span>
+                    <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
 
                 {/* Tasa de Cumplimiento */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
@@ -4145,6 +4223,342 @@ export default function AdminDashboardPage() {
               <button
                 type="button"
                 onClick={() => setShowNuevoIngresoModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ALUMNOS QUE PAGARON */}
+      {showPaidStudentsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">Alumnos que Pagaron</h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      {paidStudentsList.length} {paidStudentsList.length === 1 ? 'Alumno' : 'Alumnos'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Lista de alumnos que cuentan con al menos un concepto de pago confirmado en la plataforma.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaidStudentsModal(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search and Actions */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar alumno por nombre, matrícula, nivel, grado o grupo..."
+                  value={paidStudentsSearch}
+                  onChange={(e) => setPaidStudentsSearch(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs"
+                />
+                {paidStudentsSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPaidStudentsSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyPaidNames}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shrink-0"
+                title="Copiar lista de nombres al portapapeles"
+              >
+                {copiedPaidNames ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">¡Copiados!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-slate-400" />
+                    <span>Copiar Nombres</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto space-y-2 border border-slate-800/80 rounded-2xl bg-slate-950/50 p-2">
+              {filteredPaidStudentsList.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 text-xs space-y-2">
+                  <Users className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+                  <p className="font-semibold text-slate-400">
+                    {paidStudentsSearch
+                      ? 'No se encontraron alumnos con el criterio de búsqueda.'
+                      : 'No hay alumnos con pagos confirmados aún.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {filteredPaidStudentsList.map((st) => {
+                    const confirmedPagos = st.pagos.filter((p) => p.estado === 'Confirmado');
+                    return (
+                      <div
+                        key={st.id}
+                        className="p-3.5 hover:bg-slate-900/80 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm shrink-0">
+                            {st.nombre.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-slate-100 text-sm">{st.nombre}</span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                {confirmedPagos.length} {confirmedPagos.length === 1 ? 'concepto confirmado' : 'conceptos confirmados'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 flex-wrap">
+                              <span className="font-mono text-cyan-400 font-medium">@{st.usuario}</span>
+                              <span>•</span>
+                              <span className="text-slate-300 font-semibold">{st.nivelEscolar}</span>
+                              {st.grado && st.grupo && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-400 font-mono">
+                                    {st.grado}º "{st.grupo}"
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            {/* Paid concepts chips */}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                              {confirmedPagos.slice(0, 4).map((p) => (
+                                <span
+                                  key={p.id}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700/80"
+                                >
+                                  {p.concepto}
+                                </span>
+                              ))}
+                              {confirmedPagos.length > 4 && (
+                                <span className="text-[10px] text-slate-500">
+                                  +{confirmedPagos.length - 4} más
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:self-center self-end shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowPaidStudentsModal(false);
+                              setActiveTabSection('verificacion');
+                              if (st.grado && st.grupo) {
+                                setSelectedGroupTab(`${st.grado}${st.grupo}`);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300 text-xs font-bold transition-all border border-slate-700 hover:border-emerald-400 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <span>Ver Pagos</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+              <span className="text-slate-500">
+                Mostrando {filteredPaidStudentsList.length} de {paidStudentsList.length} alumnos con pagos
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPaidStudentsModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ALUMNOS DADOS DE BAJA */}
+      {showBajasModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">Alumnos Dados de Baja</h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/15 text-red-300 border border-red-500/30">
+                      {bajasStudentsList.length} {bajasStudentsList.length === 1 ? 'Alumno' : 'Alumnos'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Alumnos registrados en la base de datos con estatus inactivo (Baja) en el colegio.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBajasModal(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search and Actions */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar alumno dado de baja por nombre, matrícula, nivel, grado o grupo..."
+                  value={bajasSearch}
+                  onChange={(e) => setBajasSearch(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 text-xs"
+                />
+                {bajasSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setBajasSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyBajasNames}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shrink-0"
+                title="Copiar lista de nombres al portapapeles"
+              >
+                {copiedBajasNames ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">¡Copiados!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-slate-400" />
+                    <span>Copiar Nombres</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto space-y-2 border border-slate-800/80 rounded-2xl bg-slate-950/50 p-2">
+              {filteredBajasStudentsList.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 text-xs space-y-2">
+                  <UserX className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+                  <p className="font-semibold text-slate-400">
+                    {bajasSearch
+                      ? 'No se encontraron alumnos con el criterio de búsqueda.'
+                      : 'No hay alumnos dados de baja registrados.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {filteredBajasStudentsList.map((st) => (
+                    <div
+                      key={st.id}
+                      className="p-3.5 hover:bg-slate-900/80 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 font-bold text-sm shrink-0">
+                          {st.nombre.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-100 text-sm">{st.nombre}</span>
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-300 border border-red-500/30">
+                              Baja
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 flex-wrap">
+                            <span className="font-mono text-cyan-400 font-medium">@{st.usuario}</span>
+                            <span>•</span>
+                            <span className="text-slate-300 font-semibold">{st.nivelEscolar}</span>
+                            {st.grado && st.grupo && (
+                              <>
+                                <span>•</span>
+                                <span className="text-slate-400 font-mono">
+                                  {st.grado}º "{st.grupo}"
+                                </span>
+                              </>
+                            )}
+                            <span>•</span>
+                            <span className="text-slate-500">
+                              {st.pagos.length} conceptos asignados
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 sm:self-center self-end shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowBajasModal(false);
+                            setActiveTabSection('gestion');
+                            setSearchQuery(st.usuario);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-red-500 hover:text-white text-slate-300 text-xs font-bold transition-all border border-slate-700 hover:border-red-400 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          title="Ver en Gestión de Alumnos para editar o reactivar"
+                        >
+                          <span>Gestionar</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+              <span className="text-slate-500">
+                Mostrando {filteredBajasStudentsList.length} de {bajasStudentsList.length} alumnos dados de baja
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowBajasModal(false)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors cursor-pointer"
               >
                 Cerrar
