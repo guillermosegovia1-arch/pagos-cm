@@ -178,6 +178,17 @@ export default function AdminDashboardPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+  // Detección en tiempo real de usuario duplicado en el formulario
+  const duplicateExistingUser = useMemo(() => {
+    const raw = formData.usuario.trim().toLowerCase();
+    if (!raw) return null;
+    return users.find(
+      (u) =>
+        u.usuario.trim().toLowerCase() === raw &&
+        (!editingUser || u.id !== editingUser.id)
+    );
+  }, [formData.usuario, users, editingUser]);
+
   // Payment status & comment edit modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingPago, setEditingPago] = useState<Pago | null>(null);
@@ -1021,17 +1032,36 @@ export default function AdminDashboardPage() {
   const handleNivelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     const isNoAplica = isNoAplicaNivel(val);
-    setFormData((prev) => ({
-      ...prev,
-      nivelEscolar: val,
-      grado: isNoAplica ? '' : prev.grado || '1',
-      grupo: isNoAplica ? '' : prev.grupo || 'A',
-    }));
+    setFormData((prev) => {
+      let defaultGrado = prev.grado;
+      if (!isNoAplica) {
+        if (val === 'Pre - Maternal') defaultGrado = 'N1';
+        else if (val === 'Maternal') defaultGrado = 'N2';
+        else if (val === 'Kinder' && !['K1', 'K2', 'K3'].includes((prev.grado || '').toUpperCase())) defaultGrado = 'K1';
+        else if (val === 'Primaria' && !['1', '2', '3', '4', '5', '6'].includes(prev.grado || '')) defaultGrado = '1';
+        else if (val === 'Secundaria' && !['7', '8', '9'].includes(prev.grado || '')) defaultGrado = '7';
+        else if (val === 'Preparatoria' && !['10', '11', '12'].includes(prev.grado || '')) defaultGrado = '10';
+      }
+      return {
+        ...prev,
+        nivelEscolar: val,
+        grado: isNoAplica ? '' : defaultGrado || '1',
+        grupo: isNoAplica ? '' : prev.grupo || 'A',
+      };
+    });
   };
 
   const handleSaveUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
+
+    // Validación preventiva de usuario duplicado antes de enviar
+    if (duplicateExistingUser) {
+      setPasswordError(
+        `Usuario existente: El usuario "${formData.usuario.trim()}" ya está ocupado por ${duplicateExistingUser.nombre} (${duplicateExistingUser.nivelEscolar} ${duplicateExistingUser.grado || ''}º "${duplicateExistingUser.grupo || ''}"). Por favor asigne un usuario diferente.`
+      );
+      return;
+    }
 
     let finalPasswordToSubmit = formData.password;
 
@@ -1062,21 +1092,38 @@ export default function AdminDashboardPage() {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nombre: formData.nombre,
-          usuario: formData.usuario,
+          nombre: formData.nombre.trim(),
+          usuario: formData.usuario.trim(),
           password: finalPasswordToSubmit,
           nivelEscolar: formData.nivelEscolar,
-          grado: isNoAplica ? null : formData.grado,
-          grupo: isNoAplica ? null : formData.grupo,
+          grado: isNoAplica ? null : formData.grado ? formData.grado.trim() : null,
+          grupo: isNoAplica ? null : formData.grupo ? formData.grupo.trim() : null,
           estado: formData.estado,
           role: computedRole,
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const rawText = await res.text();
+        console.error('Non-JSON server response:', res.status, rawText);
+        if (res.status === 401) {
+          throw new Error('Su sesión ha expirado. Por favor vuelva a iniciar sesión.');
+        }
+        if (res.status === 403) {
+          throw new Error('No tiene permisos para modificar este usuario.');
+        }
+        if (res.status === 404) {
+          throw new Error('El usuario no fue encontrado en la base de datos.');
+        }
+        throw new Error(`Error en el servidor (${res.status}). No se pudieron guardar los datos.`);
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Error al guardar el usuario');
+        throw new Error(data?.error || 'Error al guardar los datos del usuario');
       }
 
       setFeedback({
@@ -1087,7 +1134,7 @@ export default function AdminDashboardPage() {
       setShowUserModal(false);
       fetchUsers();
     } catch (err: any) {
-      setPasswordError(err.message);
+      setPasswordError(err.message || 'Error al procesar la solicitud');
     } finally {
       setSavingUser(false);
     }
@@ -3062,17 +3109,37 @@ export default function AdminDashboardPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Usuario
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-300 uppercase tracking-wider text-[11px]">
+                    Usuario
+                  </label>
+                  {duplicateExistingUser && (
+                    <span className="text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                      <AlertTriangle className="w-3 h-3 text-red-400" />
+                      <span>Usuario existente</span>
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={formData.usuario}
                   onChange={(e) => setFormData({ ...formData, usuario: e.target.value })}
                   placeholder="Ej. sofial"
                   required
-                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm font-mono"
+                  className={`w-full p-3 bg-slate-950 border rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 text-sm font-mono transition-colors ${
+                    duplicateExistingUser
+                      ? 'border-red-500 focus:ring-red-500 bg-red-950/20 text-red-200'
+                      : 'border-slate-800 focus:ring-cyan-500'
+                  }`}
                 />
+                {duplicateExistingUser && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>
+                      <strong>Usuario existente:</strong> El usuario "<strong>{formData.usuario.trim()}</strong>" ya está asignado a <strong>{duplicateExistingUser.nombre}</strong> ({duplicateExistingUser.nivelEscolar} {duplicateExistingUser.grado || ''}º "{duplicateExistingUser.grupo || ''}").
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Password display & Nueva contraseña button */}
@@ -3207,18 +3274,49 @@ export default function AdminDashboardPage() {
                       }));
                       return;
                     }
-                    const match = val.match(/^([a-zA-Z0-9]+?)([a-zA-Z])$/);
+
+                    // 1. Revisar si coincide con un grupo personalizado de la base de datos
+                    const customMatch = customGroups.find(
+                      (cg) => (cg.name || `${cg.grado}${cg.grupo}`) === val
+                    );
+                    if (customMatch) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        nivelEscolar: customMatch.nivelEscolar || prev.nivelEscolar,
+                        grado: customMatch.grado,
+                        grupo: customMatch.grupo,
+                      }));
+                      return;
+                    }
+
+                    // 2. Extraer grado y grupo usando regex flexible (soporta K1A, 1A, 10B, K2-A, etc.)
+                    const clean = val.trim();
+                    const match = clean.match(/^([a-zA-Z0-9]+?)\s*[-_]?\s*([a-zA-Z])$/);
                     if (match) {
                       const g = match[1];
-                      const gr = match[2];
-                      let lvl = formData.nivelEscolar;
+                      const gr = match[2].toUpperCase();
                       const gUpper = g.toUpperCase();
-                      if (gUpper === 'N1') lvl = 'Pre - Maternal';
-                      else if (gUpper === 'N2') lvl = 'Maternal';
-                      else if (['K1', 'K2', 'K3'].includes(gUpper)) lvl = 'Kinder';
-                      else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) lvl = 'Primaria';
-                      else if (['7', '8', '9'].includes(gUpper)) lvl = 'Secundaria';
-                      else if (['10', '11', '12'].includes(gUpper)) lvl = 'Preparatoria';
+
+                      // Buscar si ya existe algún alumno en este grupo para auto-asociar su nivel exacto
+                      const sampleStudent = users.find(
+                        (u) =>
+                          u.role === 'ALUMNO' &&
+                          u.grado?.toUpperCase() === gUpper &&
+                          u.grupo?.toUpperCase() === gr &&
+                          u.nivelEscolar &&
+                          !isNoAplicaNivel(u.nivelEscolar)
+                      );
+
+                      let lvl = sampleStudent?.nivelEscolar || formData.nivelEscolar;
+                      if (!sampleStudent) {
+                        if (gUpper === 'N1') lvl = 'Pre - Maternal';
+                        else if (gUpper === 'N2') lvl = 'Maternal';
+                        else if (['K1', 'K2', 'K3'].includes(gUpper)) lvl = 'Kinder';
+                        else if (['1', '2', '3', '4', '5', '6'].includes(gUpper)) lvl = 'Primaria';
+                        else if (['7', '8', '9'].includes(gUpper)) lvl = 'Secundaria';
+                        else if (['10', '11', '12'].includes(gUpper)) lvl = 'Preparatoria';
+                      }
+
                       setFormData((prev) => ({
                         ...prev,
                         nivelEscolar: lvl,

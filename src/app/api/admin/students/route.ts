@@ -69,13 +69,21 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data;
 
-    const existing = await prisma.user.findUnique({
-      where: { usuario: data.usuario.trim() },
+    const existing = await prisma.user.findFirst({
+      where: {
+        usuario: {
+          equals: data.usuario.trim(),
+          mode: 'insensitive',
+        },
+      },
     });
 
     if (existing) {
       return NextResponse.json(
-        { error: `El usuario "${data.usuario}" ya existe en el sistema.` },
+        {
+          error: `Usuario existente: El usuario "${data.usuario.trim()}" ya se encuentra registrado para ${existing.nombre}.`,
+          code: 'USER_EXISTS',
+        },
         { status: 400 }
       );
     }

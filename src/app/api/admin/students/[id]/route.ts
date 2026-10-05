@@ -1,4 +1,6 @@
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -14,23 +16,29 @@ const userUpdateSchema = z.object({
   grado: z.string().nullable().optional(),
   grupo: z.string().nullable().optional(),
   estado: z.enum(['Alta', 'Baja']),
+  role: z.enum(['ADMIN', 'ALUMNO', 'SUPERVISOR']).optional(),
 });
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const token = request.cookies.get('pagos_cm_session')?.value;
-  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-  const payload = await verifySessionToken(token);
-  if (!payload || payload.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Acceso no permitido' }, { status: 403 });
-  }
-
-  const { id } = await params;
-
   try {
+    const token = request.cookies.get('pagos_cm_session')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    const payload = await verifySessionToken(token);
+    if (!payload || (payload.role !== 'ADMIN' && payload.role !== 'SUPERVISOR')) {
+      return NextResponse.json({ error: 'Acceso no permitido' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: 'ID de usuario no proporcionado' }, { status: 400 });
+    }
+
     const body = await request.json();
     const parsed = userUpdateSchema.safeParse(body);
 
@@ -52,13 +60,24 @@ export async function PUT(
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    if (data.usuario.trim() !== existingUser.usuario) {
-      const duplicateUser = await prisma.user.findUnique({
-        where: { usuario: data.usuario.trim() },
+    // Verificar si el nuevo usuario ya pertenece a otra cuenta (comparación insensible a mayúsculas)
+    if (data.usuario.trim().toLowerCase() !== existingUser.usuario.trim().toLowerCase()) {
+      const duplicateUser = await prisma.user.findFirst({
+        where: {
+          usuario: {
+            equals: data.usuario.trim(),
+            mode: 'insensitive',
+          },
+          id: { not: id },
+        },
       });
+
       if (duplicateUser) {
         return NextResponse.json(
-          { error: `El usuario "${data.usuario}" ya pertenece a otra cuenta.` },
+          {
+            error: `Usuario existente: El usuario "${data.usuario.trim()}" ya está registrado para otro alumno (${duplicateUser.nombre}).`,
+            code: 'USER_EXISTS',
+          },
           { status: 400 }
         );
       }
@@ -66,7 +85,7 @@ export async function PUT(
 
     const isSupervisor = data.nivelEscolar ? data.nivelEscolar.toLowerCase().includes('supervisor') : false;
     const isNoAplica = data.nivelEscolar ? (data.nivelEscolar.toLowerCase().includes('no aplica') || isSupervisor) : false;
-    const computedRole = isSupervisor ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : (existingUser.role === 'ADMIN' || existingUser.role === 'SUPERVISOR') ? 'ALUMNO' : existingUser.role;
+    const computedRole = data.role || (isSupervisor ? 'SUPERVISOR' : isNoAplica ? 'ADMIN' : (existingUser.role === 'ADMIN' || existingUser.role === 'SUPERVISOR') ? 'ALUMNO' : existingUser.role);
     const finalGrado = isNoAplica ? null : data.grado ? data.grado.trim() : null;
     const finalGrupo = isNoAplica ? null : data.grupo ? data.grupo.trim() : null;
 
@@ -78,7 +97,7 @@ export async function PUT(
       updatedPasswordPlain = data.password.trim();
     }
 
-    const updatedUser = await prisma.user.update({
+    await prisma.user.update({
       where: { id },
       data: {
         nombre: data.nombre.trim(),
@@ -93,6 +112,7 @@ export async function PUT(
       },
     });
 
+    // Si cambió el nivel escolar, sincronizar los conceptos correspondientes
     if (data.nivelEscolar !== existingUser.nivelEscolar) {
       if (isNoAplica) {
         await prisma.pago.deleteMany({ where: { userId: id } });
@@ -128,10 +148,10 @@ export async function PUT(
     });
 
     return NextResponse.json({ success: true, user: finalUser });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Update user error:', error);
     return NextResponse.json(
-      { error: 'Error al actualizar la información del usuario' },
+      { error: error?.message || 'Error al actualizar la información del usuario' },
       { status: 500 }
     );
   }
@@ -141,21 +161,27 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const token = request.cookies.get('pagos_cm_session')?.value;
-  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-  const payload = await verifySessionToken(token);
-  if (!payload || payload.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Acceso no permitido' }, { status: 403 });
-  }
-
-  const { id } = await params;
-
   try {
+    const token = request.cookies.get('pagos_cm_session')?.value;
+    if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+    const payload = await verifySessionToken(token);
+    if (!payload || (payload.role !== 'ADMIN' && payload.role !== 'SUPERVISOR')) {
+      return NextResponse.json({ error: 'Acceso no permitido' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: 'ID de usuario no proporcionado' }, { status: 400 });
+    }
+
     await prisma.user.delete({ where: { id } });
     return NextResponse.json({ success: true, message: 'Usuario eliminado' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Delete user error:', error);
-    return NextResponse.json({ error: 'Error al eliminar el usuario' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'Error al eliminar el usuario' },
+      { status: 500 }
+    );
   }
 }
