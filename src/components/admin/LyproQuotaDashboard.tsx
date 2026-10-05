@@ -163,9 +163,6 @@ export default function LyproQuotaDashboard({
   isNuevoIngreso,
   onOpenEditPago,
 }: LyproQuotaDashboardProps) {
-  // En Progrentis, permitimos toggle opcional para ver el rango estricto (2º P a 12º) o K1 a 12º
-  const [progrentisRange, setProgrentisRange] = useState<'oficial' | 'todos'>('oficial');
-
   // Modal State
   const [modalMetric, setModalMetric] = useState<MetricType | null>(null);
   const [modalSearch, setModalSearch] = useState('');
@@ -179,17 +176,15 @@ export default function LyproQuotaDashboard({
   const [tablePage, setTablePage] = useState(1);
   const pageSize = 25;
 
-  // Filtrado de universo de alumnos según sección
+  // Filtrado de universo de alumnos según sección (Innovatiq: K1 a 12 | Progrentis: 2º Primaria a 12)
+  // Incluye todos los alumnos (Altas y Bajas) registrados en la base de datos
   const scopedStudents = useMemo(() => {
     if (sectionType === 'innovatiq') {
       return users.filter(isInnovatiqStudent);
     } else {
-      if (progrentisRange === 'todos') {
-        return users.filter(isInnovatiqStudent);
-      }
       return users.filter(isProgrentisStudent);
     }
-  }, [sectionType, users, progrentisRange]);
+  }, [sectionType, users]);
 
   // Map de alumnos con su pago de Lypro
   const studentsWithLypro = useMemo(() => {
@@ -219,12 +214,14 @@ export default function LyproQuotaDashboard({
       (item) => !item.lypro || item.lypro.estado === 'Pendiente'
     );
     const bajas = studentsWithLypro.filter((item) => item.student.estado === 'Baja');
+    const altas = studentsWithLypro.filter((item) => item.student.estado === 'Alta');
     const nuevoIngreso = studentsWithLypro.filter((item) => item.isNuevo);
 
     const completionRate = total > 0 ? Math.round((confirmados.length / total) * 100) : 0;
 
     return {
       total,
+      altas,
       confirmados,
       confirmadosHoy,
       confirmadosAyer,
@@ -434,42 +431,8 @@ export default function LyproQuotaDashboard({
             </p>
           </div>
 
-          {/* Quick Stats & Controls */}
+          {/* Quick Stats */}
           <div className="flex items-center gap-3 flex-wrap">
-            {!isInnovatiq && (
-              <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
-                <span className="text-[11px] text-slate-400 px-2 font-medium">Alcance:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProgrentisRange('oficial');
-                    setTablePage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
-                    progrentisRange === 'oficial'
-                      ? 'bg-indigo-500 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  2º Primaria - 12º
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProgrentisRange('todos');
-                    setTablePage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
-                    progrentisRange === 'todos'
-                      ? 'bg-indigo-500 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  K1 - 12º (Todos)
-                </button>
-              </div>
-            )}
-
             <div className="bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 flex items-center gap-3">
               <div className="text-right">
                 <div className="text-[10px] uppercase font-bold text-slate-400">Avance Lypro</div>
@@ -533,7 +496,7 @@ export default function LyproQuotaDashboard({
           type="button"
           onClick={() => handleCardClick('todos')}
           className="bg-slate-900 border border-slate-800 hover:border-cyan-500/50 hover:bg-slate-900/90 rounded-2xl p-5 shadow-xl relative overflow-hidden text-left transition-all hover:scale-[1.02] cursor-pointer group"
-          title="Haz clic para ver el listado de todos los alumnos de esta sección"
+          title="Haz clic para ver el listado de todos los alumnos de esta sección (Altas y Bajas)"
         >
           <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all">
             <Users className="w-5 h-5 text-cyan-400" />
@@ -542,8 +505,8 @@ export default function LyproQuotaDashboard({
             Cantidad de Alumnos
           </div>
           <div className="text-3xl font-extrabold text-white mt-2">{metricsData.total}</div>
-          <div className="text-[11px] text-cyan-400/90 mt-1 font-semibold flex items-center gap-1">
-            <span>Ver listado completo</span>
+          <div className="text-[11px] text-cyan-400/90 mt-1 font-semibold flex items-center justify-between">
+            <span>{metricsData.altas.length} activos · {metricsData.bajas.length} bajas</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
           </div>
         </button>

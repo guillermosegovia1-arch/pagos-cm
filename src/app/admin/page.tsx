@@ -1940,14 +1940,16 @@ export default function AdminDashboardPage() {
             {/* KPI Summary Cards */}
             {!isSupervisor && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                {/* Total Alumnos Activos */}
+                {/* Total Alumnos (Registrados en BD contando bajas) */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
                   <div className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                     <Users className="w-5 h-5" />
                   </div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Alumnos Activos</div>
-                  <div className="text-3xl font-extrabold text-white mt-2">{metrics.activeStudents}</div>
-                  <div className="text-[11px] text-slate-500 mt-1">Registrados en plataforma</div>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total de Alumnos</div>
+                  <div className="text-3xl font-extrabold text-white mt-2">{metrics.totalStudents}</div>
+                  <div className="text-[11px] text-cyan-400/90 mt-1 font-medium">
+                    {metrics.activeStudents} activos · {metrics.bajasStudents} {metrics.bajasStudents === 1 ? 'baja' : 'bajas'}
+                  </div>
                 </div>
 
                 {/* Alumnos Nuevo Ingreso (CLICKABLE) */}
