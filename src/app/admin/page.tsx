@@ -42,6 +42,7 @@ import {
   ChevronRight,
   Bell,
 } from 'lucide-react';
+import LyproQuotaDashboard from '@/components/admin/LyproQuotaDashboard';
 
 interface Pago {
   id: string;
@@ -138,7 +139,9 @@ export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string; nombre: string } | null>(null);
   const isSupervisor = currentUser?.role === 'SUPERVISOR';
   const [loading, setLoading] = useState(true);
-  const [activeTabSection, setActiveTabSection] = useState<'dashboard' | 'verificacion' | 'gestion' | 'importacion'>('dashboard');
+  const [activeTabSection, setActiveTabSection] = useState<
+    'dashboard' | 'innovatiq' | 'progrentis' | 'verificacion' | 'gestion' | 'importacion'
+  >('dashboard');
   
   // Default selected group tab is 'Administración' (Sin 'TODOS')
   const [selectedGroupTab, setSelectedGroupTab] = useState<string>('Administración');
@@ -293,7 +296,13 @@ export default function AdminDashboardPage() {
         if (data.user) {
           setCurrentUser(data.user);
           if (data.user.role === 'SUPERVISOR') {
-            setActiveTabSection((prev) => (prev === 'gestion' || prev === 'importacion' ? 'dashboard' : prev));
+            setActiveTabSection((prev) =>
+              prev === 'gestion' || prev === 'importacion'
+                ? 'innovatiq'
+                : prev === 'dashboard'
+                ? 'innovatiq'
+                : prev
+            );
           }
         }
       })
@@ -520,8 +529,10 @@ export default function AdminDashboardPage() {
     return localDate === targetISO;
   };
 
-  // Cambiar de pestaña: al cambiar a Dashboard, Gestión o Importación, se quita el filtrado
-  const handleTabChange = (section: 'dashboard' | 'verificacion' | 'gestion' | 'importacion') => {
+  // Cambiar de pestaña: al cambiar a Dashboard, Innovatiq, Progrentis, Gestión o Importación, se quita el filtrado
+  const handleTabChange = (
+    section: 'dashboard' | 'innovatiq' | 'progrentis' | 'verificacion' | 'gestion' | 'importacion'
+  ) => {
     if (isSupervisor && (section === 'gestion' || section === 'importacion')) {
       return;
     }
@@ -534,7 +545,7 @@ export default function AdminDashboardPage() {
 
   // Clic en el logotipo: regresa al Dashboard inicial y quita todos los filtros
   const handleLogoClick = () => {
-    setActiveTabSection('dashboard');
+    setActiveTabSection(isSupervisor ? 'innovatiq' : 'dashboard');
     setSelectedStatusFilter('TODOS');
     setStatusDateFilter(null);
     setSearchQuery('');
@@ -548,19 +559,27 @@ export default function AdminDashboardPage() {
     window.history.pushState({ page: 'admin', tab: activeTabSection }, '', window.location.href);
 
     const handlePopState = () => {
-      if (activeTabSection !== 'dashboard') {
-        setActiveTabSection('dashboard');
+      if (
+        activeTabSection !== 'dashboard' &&
+        activeTabSection !== 'innovatiq' &&
+        activeTabSection !== 'progrentis'
+      ) {
+        setActiveTabSection(isSupervisor ? 'innovatiq' : 'dashboard');
         setSelectedStatusFilter('TODOS');
         setStatusDateFilter(null);
-        window.history.pushState({ page: 'admin', tab: 'dashboard' }, '', window.location.href);
+        window.history.pushState(
+          { page: 'admin', tab: isSupervisor ? 'innovatiq' : 'dashboard' },
+          '',
+          window.location.href
+        );
       } else {
-        window.history.pushState({ page: 'admin', tab: 'dashboard' }, '', window.location.href);
+        window.history.pushState({ page: 'admin', tab: activeTabSection }, '', window.location.href);
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeTabSection]);
+  }, [activeTabSection, isSupervisor]);
 
   const handleStatusCardClick = (
     status: 'Confirmado' | 'En Revisión' | 'Pendiente' | 'Requiere Aclaración',
@@ -1372,7 +1391,7 @@ export default function AdminDashboardPage() {
   };
 
   // Helper date formatter
-  const formatDateDisplay = (dateString?: string | null) => {
+  const formatDateDisplay = (dateString?: string | Date | null) => {
     if (!dateString) return null;
     const ymd = getLocalDateString(dateString);
     if (!ymd) return null;
@@ -1608,32 +1627,106 @@ export default function AdminDashboardPage() {
         {/* Section Navigation Tabs */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-2 overflow-x-auto gap-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleTabChange('dashboard')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
-                activeTabSection === 'dashboard'
-                  ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                  : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>Dashboard / Métricas</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('verificacion')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
-                activeTabSection === 'verificacion'
-                  ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                  : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Panel de Verificación de Pagos</span>
-            </button>
-
-            {!isSupervisor && (
+            {isSupervisor ? (
               <>
+                <button
+                  onClick={() => handleTabChange('innovatiq')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'innovatiq'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>Innovatiq (Lypro K1-12)</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('progrentis')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'progrentis'
+                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 text-indigo-400" />
+                  <span>Progrentis (Lypro 2º-12)</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('verificacion')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'verificacion'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Panel de Verificación de Pagos</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('dashboard')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'dashboard'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Dashboard General</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleTabChange('dashboard')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'dashboard'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Dashboard / Métricas</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('innovatiq')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'innovatiq'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>Innovatiq</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('progrentis')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'progrentis'
+                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 text-indigo-400" />
+                  <span>Progrentis</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange('verificacion')}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTabSection === 'verificacion'
+                      ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Panel de Verificación de Pagos</span>
+                </button>
+
                 <button
                   onClick={() => handleTabChange('gestion')}
                   className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
@@ -2079,8 +2172,38 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
+        {/* SECTION 2: DASHBOARD INNOVATIQ (CUOTA DE LYPRO K1 A 12) */}
+        {activeTabSection === 'innovatiq' && (
+          <LyproQuotaDashboard
+            sectionType="innovatiq"
+            users={users}
+            isSupervisor={isSupervisor}
+            todayISO={metrics.todayISO}
+            yesterdayISO={metrics.yesterdayISO}
+            formatDateDisplay={formatDateDisplay}
+            isSameDayString={isSameDayString}
+            isNuevoIngreso={isNuevoIngreso}
+            onOpenEditPago={openEditPagoModal}
+          />
+        )}
+
+        {/* SECTION 3: DASHBOARD PROGRENTIS (CUOTA DE LYPRO 2º PRIMARIA A 12) */}
+        {activeTabSection === 'progrentis' && (
+          <LyproQuotaDashboard
+            sectionType="progrentis"
+            users={users}
+            isSupervisor={isSupervisor}
+            todayISO={metrics.todayISO}
+            yesterdayISO={metrics.yesterdayISO}
+            formatDateDisplay={formatDateDisplay}
+            isSameDayString={isSameDayString}
+            isNuevoIngreso={isNuevoIngreso}
+            onOpenEditPago={openEditPagoModal}
+          />
+        )}
+
         {/* GROUP TABS SYSTEM (Administración como PRIMERA opción, Detección dinámica de grupos) */}
-        {activeTabSection !== 'importacion' && activeTabSection !== 'dashboard' && (
+        {(activeTabSection === 'verificacion' || activeTabSection === 'gestion') && (
           <div className="space-y-4">
             {selectedStatusFilter !== 'TODOS' && (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-cyan-500/10 border border-cyan-500/30 p-3.5 rounded-2xl text-xs text-cyan-300 shadow-lg animate-fade-in">
